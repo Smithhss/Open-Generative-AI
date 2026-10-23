@@ -226,3 +226,36 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 4. 不新建第二套钱包、账号或会话体系。
 5. 不把 fyt JWT 当 MuAPI Key 传给上游。
 6. 不在未验收真实渠道前对外宣称"支持多模型"。
+
+---
+
+## 10. 执行记录
+
+### 2026-10-24 第一批
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| T5.3 提交二开代码 | 完成 | `46301cf`，67 文件 / +4529 / −126 |
+| C1 归档过程文档 | 完成 | 9 份计划 → `docs/archive/fyt-plans-20261023/` |
+| C1 归档测试产物 | 完成 | `docs/archive/fyt-evidence-20261023/` |
+| P0 模型放开（前端） | 完成 | `lib/fyt/images.mjs` 移除 `gpt-image-2` 白名单，改为服务端按类型过滤 |
+| P0 模型放开（后端） | 完成 | `/api/user/models` 新增 `type` 与 `with_meta`，新增 `common.ModelKind`、`model.GetModelMetasByNames` |
+| P1 视频（前端） | 完成 | 新增 `lib/fyt/videos.mjs`、`components/fyt/FytVideoStudio.jsx` |
+| P1 视频（后端） | 完成 | 新增 `/pg/videos`、`/pg/videos/:task_id`、`/pg/videos/:task_id/content` |
+
+### 执行中新发现的事实（原计划未覆盖）
+
+**`/pg` 只注册了 `chat/completions`，`/pg/images/generations` 在全部分支中都不存在。**
+原前端调用的图片端点在当前 fyt 上会落到 `NoRoute` → JSON 404，也就是说图片链路此前并未真正打通。
+本轮补上了 `/pg/images/generations`、`/pg/images/edits`、`/pg/videos*`，并把 `Playground` 的临时令牌逻辑抽成 `setupPlaygroundToken` 复用。
+
+### 待验收
+
+| 项 | 需要什么 |
+|---|---|
+| 图片真实出图 | 预发环境 + 有效图片渠道，核对扣费与上游账单 |
+| 视频真实出片 | 预发环境 + 视频渠道，跑通提交→轮询→content 下载 |
+| 分组与倍率 | 确认 `/pg` 路径的 `IsPlayground` 计费在任务场景下按用户额度结算 |
+| C2 导航收缩 | 待确认后执行 |
+| C3 归档 fyt-validation | 待确认预发是否仍依赖 |
+

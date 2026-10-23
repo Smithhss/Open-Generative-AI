@@ -10,6 +10,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   const [groups, setGroups] = useState([]);
   const [group, setGroup] = useState('');
   const [models, setModels] = useState([]);
+  const [model, setModel] = useState('');
   const [modelGroup, setModelGroup] = useState('');
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
@@ -39,15 +40,19 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     if (!group || !userId) return;
     const controller = new AbortController(); setLoading(true);
     getImageModels({ group, signal: controller.signal }).then(values => {
-      if (!controller.signal.aborted) { setModels(values); setModelGroup(group); }
+      if (!controller.signal.aborted) {
+        setModels(values);
+        setModel(previous => values.includes(previous) ? previous : values[0] || '');
+        setModelGroup(group);
+      }
     }).catch(cause => { if (!controller.signal.aborted) setError(errorCopy(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [group, userId, reload, zh]);
   async function generate(prompt) {
-    if (run.current || !models.includes('gpt-image-2') || modelGroup !== group || !group || !userId) throw new Error('INVALID_IMAGE_REQUEST');
+    if (run.current || !model || modelGroup !== group || !group || !userId) throw new Error('INVALID_IMAGE_REQUEST');
     const controller = new AbortController(); run.current = controller; setRunning(true);
-    try { return await generateFytImage({ model: 'gpt-image-2', group, prompt }, { signal: controller.signal }); }
+    try { return await generateFytImage({ model, group, prompt }, { signal: controller.signal }); }
     finally { run.current = null; setRunning(false); if (!controller.signal.aborted) onSettled?.(); }
   }
   const field = 'bg-[#151515] border border-white/10 rounded-lg px-3 py-2 text-xs text-white disabled:opacity-40';
@@ -56,7 +61,10 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
       {!groups.length && <option value="">{zh ? '请先登录' : 'Sign in first'}</option>}
       {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
     </select>
-    <span className={field}>GPT Image 2 · {zh ? '单张' : '1 image'}</span>
+    <select aria-label={zh ? '图片模型' : 'Image model'} className={field} value={model} disabled={!userId || running || loading || !models.length} onChange={event => setModel(event.target.value)}>
+      {!models.length && <option value="">{zh ? '无可用模型' : 'No model'}</option>}
+      {models.map(id => <option key={id} value={id}>{id}</option>)}
+    </select>
     <button type="button" className={field} disabled={running || !userId} onClick={() => setReload(value => value + 1)}>{zh ? '刷新模型' : 'Refresh'}</button>
     <span className="text-xs text-white/45">{error || (loading ? (zh ? '读取模型…' : 'Loading…') : userId && !models.length ? (zh ? '当前分组无可用图片模型' : 'No image model in this group') : '')}</span>
   </div>;

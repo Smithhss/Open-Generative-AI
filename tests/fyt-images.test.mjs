@@ -2,14 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { availableImageModels, imageGenerationBody, normalizeGeneratedImage } from '../lib/fyt/images.mjs';
 
-test('image capability is limited to the supported model accessible in the selected group', () => {
-  assert.deepEqual(availableImageModels(['gpt-image-2','deepseek','gpt-image-2']), ['gpt-image-2']);
-  assert.deepEqual(availableImageModels(['deepseek']), []);
+test('image capability keeps every image model the server reports, deduplicated', () => {
+  assert.deepEqual(availableImageModels(['gpt-image-2','deepseek','gpt-image-2']), ['gpt-image-2','deepseek']);
+  assert.deepEqual(availableImageModels([' flux-1.1 ', '']), ['flux-1.1']);
+  assert.deepEqual(availableImageModels([]), []);
 });
 test('single image request excludes unknown model parameters and batch counts', () => {
-  assert.deepEqual(imageGenerationBody({model:'gpt-image-2',group:'default',prompt:' hello ',n:4,size:'4k'}),
-    {model:'gpt-image-2',group:'default',prompt:'hello',n:1,response_format:'b64_json',stream:false});
-  for (const params of [{model:'other',group:'default',prompt:'hi'},{model:'gpt-image-2',group:'',prompt:'hi'},{model:'gpt-image-2',group:'default',prompt:' '.repeat(5)}]) assert.throws(()=>imageGenerationBody(params));
+  assert.deepEqual(imageGenerationBody({model:'flux-1.1',group:'default',prompt:' hello ',n:4,size:'4k'}),
+    {model:'flux-1.1',group:'default',prompt:'hello',n:1,response_format:'b64_json',stream:false});
+  for (const params of [{model:'',group:'default',prompt:'hi'},{model:'gpt-image-2',group:'',prompt:'hi'},{model:'gpt-image-2',group:'default',prompt:' '.repeat(5)}]) assert.throws(()=>imageGenerationBody(params));
 });
 test('image response accepts raster base64 but rejects external URLs and active payloads', () => {
   assert.equal(normalizeGeneratedImage({data:[{b64_json:'iVBORw0KGgo='}]}).mime,'image/png');

@@ -13,6 +13,7 @@ import axios from 'axios';
 import FytAgentStudio from '@/components/fyt/FytAgentStudio';
 import FytAppsStudio from '@/components/fyt/FytAppsStudio';
 import FytImageStudio from '@/components/fyt/FytImageStudio';
+import FytVideoStudio from '@/components/fyt/FytVideoStudio';
 import FytCanvasStudio from '@/components/fyt/FytCanvasStudio';
 import { generatedImageFile } from '@/lib/fyt/image-transfer.mjs';
 import { getSessionRevision, getSessionState } from '@/lib/fyt/session.mjs';
@@ -787,7 +788,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
         </div>
       )}
 
-      {fytMode && <div className="flex-shrink-0 bg-indigo-600 text-white text-center text-xs py-2 px-4">{locale === 'zh' ? 'GPT Image 2 单张生图已接入 · 文本助手、本地编辑与无限画布可用 · 视频生成未开放' : 'GPT Image 2 single-image generation connected · Text, editing and canvas available · Video unavailable'}</div>}
+      {fytMode && <div className="flex-shrink-0 bg-indigo-600 text-white text-center text-xs py-2 px-4">{locale === 'zh' ? '图片与视频生成已接入 fyt · 文本助手、本地编辑与无限画布可用' : 'Image and video generation connected to fyt · Text, editing and canvas available'}</div>}
 
       {/* Header */}
       {isHeaderVisible && (
@@ -1043,7 +1044,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
         <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
         {fytMode ? <>
           <div className={activeTab === 'image' ? 'h-full w-full' : 'hidden'}><FytImageStudio locale={locale} userId={fyt.userId} active={activeTab === 'image'} onSettled={fyt.onGenerationSettled} onOpenImage={handleGeneratedImageOpen} transferring={transferPending} /></div>
-          <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><VideoStudio locale={locale} previewMode persistenceId={fyt.userId} /></div>
+          <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><FytVideoStudio locale={locale} userId={fyt.userId} active={activeTab === 'video'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'layers' ? 'h-full w-full' : 'hidden'}><LayersStudio locale={locale} localOnly preserveOriginalPanel active={activeTab === 'layers'} incomingImage={imageTransfer?.target === 'layers' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           <div className={activeTab === 'agents' ? 'h-full w-full' : 'hidden'}><FytAgentStudio locale={locale} userId={fyt.userId} enabled={activeTab === 'agents'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio locale={locale} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
