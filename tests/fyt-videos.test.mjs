@@ -13,9 +13,9 @@ import {
 test('video request keeps only supported parameters', () => {
   assert.deepEqual(
     videoRequestBody({ model: 'kling-v2', group: 'default', prompt: ' a fox ', seconds: 5, size: '1280x720', imageUrl: 'https://cdn/x.png', seed: 1 }),
-    { model: 'kling-v2', group: 'default', prompt: 'a fox', seconds: 5, size: '1280x720', input_reference: 'https://cdn/x.png' },
+    { model: 'kling-v2', group: 'default', prompt: 'a fox', seconds: '5', size: '1280x720', input_reference: 'https://cdn/x.png' },
   );
-  assert.equal(videoRequestBody({ model: 'kling-v2', group: 'default', prompt: 'hi' }).seconds, 4);
+  assert.equal(videoRequestBody({ model: 'kling-v2', group: 'default', prompt: 'hi' }).seconds, '4');
   for (const params of [
     { model: '', group: 'default', prompt: 'hi' },
     { model: 'kling-v2', group: '', prompt: 'hi' },
