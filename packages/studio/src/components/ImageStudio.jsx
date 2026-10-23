@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
+import { imageBlob } from "../utils/imageBlob.js";
+import { getImageDownloadFilename } from "../utils/downloadImage.js";
 import { formatErrorMessage } from "../utils/formatError.js";
 import { scopedPersistKey, migrateLegacyPersistKey } from "../persistKey.js";
 import DrawModal from "./DrawModal.jsx";
@@ -65,12 +67,11 @@ import { resolveCopy } from "../i18nUtils";
 
 async function downloadImage(url, filename) {
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
+    const blob = await imageBlob(url);
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    a.download = filename;
+    a.download = getImageDownloadFilename(filename, blob.type);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -82,7 +83,7 @@ async function downloadImage(url, filename) {
 
 // ─── UploadButton (inline picker) ───────────────────────────────────────────
 
-function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], label = null, persistedHistory = null, onHistoryChange = null, copy }) {
+function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], label = null, persistedHistory = null, onHistoryChange = null, copy, previewMode = false }) {
   const t = copy.uploadButton;
   const [panelOpen, setPanelOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -189,6 +190,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], 
   };
 
   const processFiles = async (files) => {
+    if (previewMode) return;
     if (!files.length) return;
 
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -977,11 +979,17 @@ export default function ImageStudio({
   droppedFiles,
   onFilesHandled,
   locale = "en",
+  previewMode = false,
+  persistenceId = null,
+  fytImage = null,
 }) {
   const copy = resolveCopy(en, zh, locale);
   const LEGACY_PERSIST_KEY = "hg_image_studio_persistent";
-  const PERSIST_KEY = scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
+  const PERSIST_KEY = previewMode
+    ? (persistenceId ? `fyt:studio:image:v1:${persistenceId}` : null)
+    : scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
   useEffect(() => {
+    if (previewMode) return;
     migrateLegacyPersistKey(LEGACY_PERSIST_KEY, PERSIST_KEY);
   }, [PERSIST_KEY]);
 
@@ -1058,6 +1066,7 @@ export default function ImageStudio({
 
   // ── Persistence: Load ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!PERSIST_KEY) return;
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
       if (stored) {
@@ -1084,7 +1093,7 @@ export default function ImageStudio({
         if (data.uploadedImageUrls) setUploadedImageUrls(data.uploadedImageUrls);
         if (data.uploadHistory) setUploadHistory(data.uploadHistory);
         if (data.batchSize) setBatchSize(data.batchSize);
-        if (data.localHistory) setLocalHistory(data.localHistory);
+        if (data.localHistory && !fytImage) setLocalHistory(data.localHistory);
       }
     } catch (err) {
       console.warn("Failed to load ImageStudio persistence:", err);
@@ -1094,6 +1103,7 @@ export default function ImageStudio({
   // ── Adjust height on load ────────────────────────────────────────────────
   // ── Persistence: Save ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!PERSIST_KEY) return;
     const timer = setTimeout(() => {
       try {
         const state = {
@@ -1108,7 +1118,7 @@ export default function ImageStudio({
           uploadedImageUrls,
           uploadHistory,
           batchSize,
-          localHistory,
+          localHistory: fytImage ? [] : localHistory,
         };
         localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
       } catch (err) {
@@ -1132,6 +1142,7 @@ export default function ImageStudio({
   ]);
 
   const processDroppedImages = async (files) => {
+    if (previewMode) return;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     const tooLarge = files.filter((f) => f.size > MAX_IMAGE_SIZE);
     if (tooLarge.length > 0) {
@@ -1209,7 +1220,7 @@ export default function ImageStudio({
   const showEffectBtn = currentEffects.length > 0;
   const selectedFamily = imageModelCatalog.familyById.get(selectedFamilyId) || initialFamily;
   const selectedPickerEntry = imageModelPickerEntryByVariantId.get(selectedModelId);
-  const selectedModelDisplayName = selectedPickerEntry?.name || selectedFamily.name;
+  const selectedModelDisplayName = fytImage ? "GPT Image 2" : selectedPickerEntry?.name || selectedFamily.name;
   const currentMode = imageMode ? "i2i" : "t2i";
   const selectedVariant = imageModelCatalog.variantById.get(selectedModelId);
   const supplementalInputs = getSupplementalModelInputs(selectedVariant?.model);
@@ -1355,6 +1366,18 @@ export default function ImageStudio({
 
   // ── Generation ───────────────────────────────────────────────────────────
   const handleGenerate = async () => {
+    if (fytImage) {
+      if (generating || !fytImage.enabled || !prompt.trim()) return;
+      setGenerating(true); setGenerateError(null);
+      try {
+        const result = await fytImage.generate(prompt);
+        addToHistory({ id: crypto.randomUUID(), url: result.url, prompt: prompt.trim(), model: 'gpt-image-2', aspect_ratio: 'auto', timestamp: new Date().toISOString(), requestId: result.requestId });
+      } catch (error) {
+        setGenerateError(fytImage.errorCopy(error));
+      } finally { setGenerating(false); }
+      return;
+    }
+    if (previewMode) return;
     if (generating) return;
 
     if (imageMode) {
@@ -1555,6 +1578,10 @@ export default function ImageStudio({
                   <p className="text-white/70 text-xs line-clamp-3 leading-relaxed" title={entry.prompt}>
                     {entry.prompt || copy.gallery.noPrompt}
                   </p>
+                  {fytImage?.onOpenImage && <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button type="button" disabled={fytImage.transferring} className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-2 text-[11px] text-cyan-200 disabled:opacity-40" onClick={event => { event.stopPropagation(); void fytImage.onOpenImage(entry, 'design-agent'); }}>{locale === 'zh' ? '加入无限画布' : 'Add to canvas'}</button>
+                    <button type="button" disabled={fytImage.transferring} className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-white/80 disabled:opacity-40" onClick={event => { event.stopPropagation(); void fytImage.onOpenImage(entry, 'layers'); }}>{locale === 'zh' ? '本地编辑' : 'Edit locally'}</button>
+                  </div>}
                   <div className="flex items-center justify-between mt-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 capitalize">
@@ -1614,13 +1641,15 @@ export default function ImageStudio({
         )}
       </div>
 
+      {fytImage && <div className="absolute top-3 left-4 right-4 text-center text-xs text-white/50 pointer-events-none">{locale === 'zh' ? '单张文生图 · 按 fyt 实际用量计费 · 生成结果仅本页保留，请及时下载' : 'Single image · Billed by fyt usage · Download results before reloading'}</div>}
       {/* ── BOTTOM PROMPT BAR ── */}
       <PromptComposer>
+          {generateError && <p role="alert" className="text-xs text-red-300 mb-2">{generateError}</p>}
           {/* Top row: upload picker + textarea */}
           <div className="flex flex-col gap-3">
             {/* Inline list of uploaded files */}
             <div className="flex items-center gap-2.5 flex-wrap">
-              {uploadedImageUrls && uploadedImageUrls.length > 0 && uploadedImageUrls.map((url, idx) => (
+              {!fytImage && uploadedImageUrls && uploadedImageUrls.length > 0 && uploadedImageUrls.map((url, idx) => (
                 <div key={url} className={PROMPT_MEDIA_PREVIEW_CLASS}>
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button
@@ -1638,9 +1667,10 @@ export default function ImageStudio({
               ))}
               
               {/* Main Upload Trigger */}
-              {referenceVariant && uploadedImageUrls.length < referenceImageLimit && (
+              {!fytImage && referenceVariant && uploadedImageUrls.length < referenceImageLimit && (
                 <UploadButton
                   apiKey={apiKey}
+                  previewMode={previewMode}
                   maxImages={referenceImageLimit}
                   onSelect={handleUploadSelect}
                   onClear={handleUploadClear}
@@ -1652,9 +1682,10 @@ export default function ImageStudio({
               )}
 
               {/* Swap Image Upload Trigger */}
-              {imageMode && getI2IModelById(selectedModelId)?.swapField && (
+              {!fytImage && imageMode && getI2IModelById(selectedModelId)?.swapField && (
                 <UploadButton
                   apiKey={apiKey}
+                  previewMode={previewMode}
                   maxImages={1}
                   onSelect={({ urls }) => setSwapImageUrl(urls[0] || null)}
                   onClear={() => setSwapImageUrl(null)}
@@ -1669,15 +1700,16 @@ export default function ImageStudio({
             <PromptTextarea
               ref={textareaRef}
               value={prompt}
+              maxLength={fytImage ? 4000 : undefined}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={placeholderText}
+              placeholder={fytImage ? copy.promptBar.placeholderT2I : placeholderText}
             />
           </div>
 
           {/* Bottom row: controls + generate */}
           <PromptFooter>
             {/* Left controls */}
-            <PromptControls ref={dropdownRef}>
+            {fytImage ? fytImage.controls : <PromptControls ref={dropdownRef}>
               {/* Model button */}
               <div className="relative">
                 <button
@@ -1873,6 +1905,7 @@ export default function ImageStudio({
                 type="button"
                 className={promptControlClassName()}
                 onClick={() => setIsDrawModalOpen(true)}
+                disabled={previewMode}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40 text-white group-hover:text-[#22d3ee] transition-colors">
                   <path d="M12 20h9" />
@@ -1882,12 +1915,12 @@ export default function ImageStudio({
                   {copy.promptBar.drawButton}
                 </span>
               </button>
-            </PromptControls>
+            </PromptControls>}
 
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating}
+              disabled={generating || (fytImage ? !fytImage.enabled || !prompt.trim() : previewMode)}
             >
               {generating ? (
                 <>
@@ -1896,7 +1929,7 @@ export default function ImageStudio({
                 </>
               ) : (
                 <>
-                  <span>{copy.promptBar.generateButton}</span>
+                  <span>{fytImage ? copy.promptBar.generateButton : previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.promptBar.generateButton}</span>
                 </>
               )}
             </PromptAction>

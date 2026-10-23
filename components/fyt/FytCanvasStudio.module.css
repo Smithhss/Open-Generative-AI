@@ -1,0 +1,18 @@
+.root {
+  background: #0b0d12;
+  --bg-page: #0b0d12;
+  --bg-card: #171b25;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-default: rgba(255, 255, 255, 0.15);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+}
+.root :global(.bg-bg-page) {
+  background-color: var(--bg-page);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.root :global(.bg-bg-card) { background-color: var(--bg-card); }
+.root :global(.border-divider), .root :global(.border-border-main) { border-color: var(--border-default); }
+.root :global(.text-text-main), .root :global(.text-primary-text) { color: var(--text-primary); }
+.root :global(.text-text-sub), .root :global(.text-secondary-text) { color: var(--text-secondary); }

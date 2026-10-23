@@ -14,6 +14,8 @@ import { formatErrorMessage } from "../utils/formatError.js";
 import en from "../messages/en/layersStudio.json";
 import zh from "../messages/zh/layersStudio.json";
 import { resolveCopy } from "../i18nUtils";
+import { drawColorGradingOverlays } from "../utils/colorGradingOverlays.js";
+import { loadLocalImage, limitDrawingHistory } from "../localImage.js";
 
 // Upscale Models Definition from schema_data.json
 const UPSCALE_MODELS = [
@@ -88,11 +90,16 @@ export default function LayersStudio({
   onGenerationComplete,
   onGenerationError,
   locale = "en",
+  localOnly = false,
+  preserveOriginalPanel = false,
+  active = true,
+  incomingImage = null,
+  onImageHandled,
 }) {
   const copy = resolveCopy(en, zh, locale);
 
   // Main canvas & image state
-  const [currentImageUrl, setCurrentImageUrl] = useState(DEFAULT_SAMPLE_IMAGE);
+  const [currentImageUrl, setCurrentImageUrl] = useState(localOnly ? null : DEFAULT_SAMPLE_IMAGE);
   const [prompt, setPrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -165,7 +172,7 @@ export default function LayersStudio({
   const [isDrawing, setIsDrawing] = useState(false);
 
   // Right Inspector Panel State: 'layer-decomposition' | 'upscale' | 'color-grading' | 'remove-bg' | 'expand-crop' | 'menu' | etc.
-  const [activeSideTab, setActiveSideTab] = useState("layer-decomposition");
+  const [activeSideTab, setActiveSideTab] = useState(localOnly ? "color-grading" : "layer-decomposition");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Tool Specific Inputs
@@ -189,6 +196,28 @@ export default function LayersStudio({
   // Drag & Drop Upload State
   const [isDropzoneDragging, setIsDropzoneDragging] = useState(false);
   const dropzoneDragCounterRef = useRef(0);
+  const localImportRef = useRef(null);
+  const localIncomingId = useRef(null);
+  const localImageRef = useRef(null);
+  const localAliveRef = useRef(true);
+  const localRevisionRef = useRef(0);
+  const [localExporting, setLocalExporting] = useState(false);
+  const [localCanvasReady, setLocalCanvasReady] = useState(false);
+  const localSyncedUrl = useRef(null);
+  const localHistoryRevision = useRef(0);
+  const [localHistoryBusy, setLocalHistoryBusy] = useState(false);
+  const [localHistoryTruncated, setLocalHistoryTruncated] = useState(false);
+  const localCopy = (zh, english) => locale === "zh" ? zh : english;
+  useEffect(() => {
+    localAliveRef.current = true;
+    return () => {
+      localAliveRef.current = false;
+      localRevisionRef.current++;
+      localImportRef.current?.abort();
+      localImageRef.current?.release();
+    };
+  }, []);
+
 
   // Drawing History Stack
   const [historyStack, setHistoryStack] = useState([]);
@@ -209,11 +238,13 @@ export default function LayersStudio({
   const syncCanvasDimensions = useCallback(() => {
     const canvas = drawingCanvasRef.current;
     const img = imageRef.current;
-    if (canvas && img && img.complete) {
+    if (canvas && img && img.complete && img.naturalWidth > 0) {
+      if (localOnly && (img.src !== currentImageUrl || localSyncedUrl.current === currentImageUrl)) return;
       canvas.width = img.naturalWidth || img.clientWidth || 1024;
       canvas.height = img.naturalHeight || img.clientHeight || 1024;
+      if (localOnly) { localSyncedUrl.current = currentImageUrl; setLocalCanvasReady(true); }
     }
-  }, []);
+  }, [currentImageUrl, localOnly]);
 
   useEffect(() => {
     syncCanvasDimensions();
@@ -275,6 +306,35 @@ export default function LayersStudio({
 
   // Upload File Helper
   const handleUploadFile = async (file) => {
+    if (localOnly) {
+      localImportRef.current?.abort();
+      const controller = new AbortController();
+      localImportRef.current = controller;
+      setUploading(true);
+      try {
+        const loaded = await loadLocalImage(file, { signal: controller.signal });
+        if (controller.signal.aborted || !localAliveRef.current) { loaded.release(); return false; }
+        localRevisionRef.current++;
+        localHistoryRevision.current++; setLocalHistoryBusy(false);
+        localImageRef.current?.release();
+        localImageRef.current = loaded;
+        setLocalCanvasReady(false);
+        setCurrentImageUrl(loaded.url);
+        setDecomposedLayers([]); setMarkedRegions([]); setLassoPoints([]);
+        setHistoryStack([]); setHistoryIndex(-1); setLocalHistoryTruncated(false);
+        setColorGrading(DEFAULT_COLOR_GRADING);
+        setZoomLevel(100); setPanOffset({ x: 0, y: 0 });
+        return true;
+      } catch (error) {
+        if (!controller.signal.aborted && localAliveRef.current) toast.error(localCopy(
+          "导入失败：仅支持PNG/JPEG/WebP，最大10MB、单边8192像素、1600万像素。",
+          "Import failed. Use PNG/JPEG/WebP, up to 10MB, 8192 per side and 16 megapixels."));
+      } finally {
+        if (localImportRef.current === controller && localAliveRef.current) setUploading(false);
+      }
+      return false;
+    }
+
     if (!apiKey) {
       toast.error(copy.toasts.enterApiKeyUpload);
       return;
@@ -298,6 +358,16 @@ export default function LayersStudio({
       setUploading(false);
     }
   };
+
+  useEffect(() => {
+    if (!localOnly || !incomingImage || !active || uploading || localIncomingId.current === incomingImage.id) return;
+    localIncomingId.current = incomingImage.id;
+    if (currentImageUrl && !window.confirm(localCopy("将替换编辑器当前图片及标注，请先导出需要保留的内容。继续吗？", "Replace the editor image and annotations? Export anything you want to keep first."))) {
+      onImageHandled?.(incomingImage.id, false);
+      return;
+    }
+    void handleUploadFile(incomingImage.file).then(success => onImageHandled?.(incomingImage.id, Boolean(success)));
+  }, [incomingImage, active, localOnly, uploading, currentImageUrl, onImageHandled]);
 
   // Shared entry point for both click-to-browse and drag-and-drop uploads
   const handleFiles = (files) => {
@@ -365,8 +435,9 @@ export default function LayersStudio({
     const wrapper = imageWrapperRef.current || imageRef.current;
     if (!wrapper) return { x: 0, y: 0, xPct: 0, yPct: 0 };
     const rect = wrapper.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const point = localOnly ? (e.touches?.[0] || e.changedTouches?.[0] || e) : (e.touches ? e.touches[0] : e);
+    const clientX = point.clientX;
+    const clientY = point.clientY;
 
     const xPx = Math.max(0, Math.min(rect.width, clientX - rect.left));
     const yPx = Math.max(0, Math.min(rect.height, clientY - rect.top));
@@ -393,6 +464,7 @@ export default function LayersStudio({
       setIsSelectingRegion(true);
       setRegionalBox({ x: coords.xPct, y: coords.yPct, width: 0, height: 0 });
     } else if (activeTool === "shapes") {
+      if (localOnly) { localHistoryRevision.current++; setLocalHistoryBusy(false); }
       e.stopPropagation();
       setIsDrawingShape(true);
       const canvasCoords = getCanvasCoords(e);
@@ -450,6 +522,7 @@ export default function LayersStudio({
       ctx.putImageData(tempCanvasImageData.current, 0, 0);
     }
 
+    if (localOnly) ctx.globalCompositeOperation = "source-over";
     ctx.beginPath();
     ctx.strokeStyle = shapeColor;
     ctx.fillStyle = shapeColor;
@@ -576,11 +649,14 @@ export default function LayersStudio({
     const dataUrl = canvas.toDataURL();
     const newStack = historyStack.slice(0, historyIndex + 1);
     newStack.push(dataUrl);
-    setHistoryStack(newStack);
-    setHistoryIndex(newStack.length - 1);
+    const bounded = localOnly ? limitDrawingHistory(historyStack, historyIndex, dataUrl) : newStack;
+    if (localOnly && bounded.length < newStack.length) setLocalHistoryTruncated(true);
+    setHistoryStack(bounded);
+    setHistoryIndex(bounded.length - 1);
   };
 
   const clearDrawingCanvas = () => {
+    if (localOnly) { localHistoryRevision.current++; setLocalHistoryBusy(false); }
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -594,14 +670,28 @@ export default function LayersStudio({
       const prevIndex = historyIndex - 1;
       const canvas = drawingCanvasRef.current;
       const ctx = canvas.getContext("2d");
+      const revision = localRevisionRef.current;
+      const operation = ++localHistoryRevision.current;
+      if (localOnly) setLocalHistoryBusy(true);
       const img = new Image();
-      img.src = historyStack[prevIndex];
       img.onload = () => {
+        if (localOnly && (!localAliveRef.current || revision !== localRevisionRef.current || operation !== localHistoryRevision.current)) return;
+        if (localOnly) ctx.globalCompositeOperation = "source-over";
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
         setHistoryIndex(prevIndex);
+        if (localOnly) setLocalHistoryBusy(false);
       };
+      img.onerror = () => {
+        if (localOnly && localAliveRef.current && operation === localHistoryRevision.current) {
+          setLocalHistoryBusy(false);
+          toast.error(localCopy("无法恢复该次标注，当前画布未更改。", "Could not restore this drawing. The current canvas was kept."));
+        }
+      };
+      img.src = historyStack[prevIndex];
     } else if (historyIndex === 0) {
+      if (localOnly && localHistoryTruncated) return;
+      if (localOnly) { localHistoryRevision.current++; setLocalHistoryBusy(false); }
       const canvas = drawingCanvasRef.current;
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -614,13 +704,25 @@ export default function LayersStudio({
       const nextIndex = historyIndex + 1;
       const canvas = drawingCanvasRef.current;
       const ctx = canvas.getContext("2d");
+      const revision = localRevisionRef.current;
+      const operation = ++localHistoryRevision.current;
+      if (localOnly) setLocalHistoryBusy(true);
       const img = new Image();
-      img.src = historyStack[nextIndex];
       img.onload = () => {
+        if (localOnly && (!localAliveRef.current || revision !== localRevisionRef.current || operation !== localHistoryRevision.current)) return;
+        if (localOnly) ctx.globalCompositeOperation = "source-over";
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
         setHistoryIndex(nextIndex);
+        if (localOnly) setLocalHistoryBusy(false);
       };
+      img.onerror = () => {
+        if (localOnly && localAliveRef.current && operation === localHistoryRevision.current) {
+          setLocalHistoryBusy(false);
+          toast.error(localCopy("无法恢复该次标注，当前画布未更改。", "Could not restore this drawing. The current canvas was kept."));
+        }
+      };
+      img.src = historyStack[nextIndex];
     }
   };
 
@@ -631,8 +733,9 @@ export default function LayersStudio({
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const point = localOnly ? (e.touches?.[0] || e.changedTouches?.[0] || e) : (e.touches ? e.touches[0] : e);
+    const clientX = point.clientX;
+    const clientY = point.clientY;
 
     return {
       x: (clientX - rect.left) * scaleX,
@@ -644,6 +747,7 @@ export default function LayersStudio({
     if (activeTool !== "draw" && activeTool !== "eraser") return;
     e.preventDefault();
     e.stopPropagation();
+    if (localOnly) { localHistoryRevision.current++; setLocalHistoryBusy(false); }
     setIsDrawing(true);
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
@@ -714,6 +818,7 @@ export default function LayersStudio({
 
   // --- REGIONAL & LASSO EDIT AI SUBMIT WITH <bbox> BBOX TAGS ---
   const handleRunRegionalEdit = async () => {
+    if (localOnly) return;
     if (!apiKey) {
       toast.error(copy.toasts.enterApiKey);
       return;
@@ -820,6 +925,7 @@ export default function LayersStudio({
 
   // --- API CALL: SEEDREAM 5.0 PRO LAYER DECOMPOSITION ---
   const handleDecompose = async (overridePrompt) => {
+    if (localOnly) return;
     const rawPrompt = overridePrompt !== undefined ? overridePrompt : prompt;
     const finalSeedreamPrompt = buildSeedreamLayerPrompt(rawPrompt);
 
@@ -881,6 +987,7 @@ export default function LayersStudio({
 
   // --- API CALL: UPSCALE IMAGE (seedvr2-image-upscale, topaz-image-upscale, ai-image-upscaler) ---
   const handleRunUpscale = async () => {
+    if (localOnly) return;
     if (!apiKey) {
       toast.error(copy.toasts.enterApiKey);
       return;
@@ -940,6 +1047,7 @@ export default function LayersStudio({
 
   // --- API CALL: REMOVE BACKGROUND (ai-background-remover) ---
   const handleRunRemoveBg = async () => {
+    if (localOnly) return;
     if (!apiKey) {
       toast.error(copy.toasts.enterApiKey);
       return;
@@ -996,6 +1104,7 @@ export default function LayersStudio({
 
   // --- API CALL: EXPAND / OUTPAINT IMAGE (ai-image-extension) ---
   const handleRunExpand = async () => {
+    if (localOnly) return;
     if (!apiKey) {
       toast.error(copy.toasts.enterApiKey);
       return;
@@ -1070,6 +1179,7 @@ export default function LayersStudio({
 
   // Download Color Graded Image (Includes live filters, vignette, halation, and film grain)
   const handleDownloadGradedImage = async () => {
+    if (localOnly) return handleLocalExport();
     if (!currentImageUrl) return;
     try {
       const img = new Image();
@@ -1090,52 +1200,7 @@ export default function LayersStudio({
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       ctx.filter = "none";
 
-      // 2. Add Vignette if configured
-      if (colorGrading.lensInstructions.vignette > 0) {
-        const vRadius = Math.max(canvas.width, canvas.height) * 0.7;
-        const grad = ctx.createRadialGradient(
-          canvas.width / 2,
-          canvas.height / 2,
-          vRadius * 0.35,
-          canvas.width / 2,
-          canvas.height / 2,
-          vRadius,
-        );
-        grad.addColorStop(0, "rgba(0,0,0,0)");
-        grad.addColorStop(
-          1,
-          `rgba(0,0,0,${colorGrading.lensInstructions.vignette * 0.95})`,
-        );
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      // 3. Add Film Grain if configured
-      if (colorGrading.filmGrain.strength > 0) {
-        const grainCanvas = document.createElement("canvas");
-        grainCanvas.width = 128;
-        grainCanvas.height = 128;
-        const gCtx = grainCanvas.getContext("2d");
-        const gImgData = gCtx.createImageData(128, 128);
-        const data = gImgData.data;
-        const bias = colorGrading.filmGrain.bias * 50;
-        for (let i = 0; i < data.length; i += 4) {
-          const noise = (Math.random() - 0.5) * 255 + bias;
-          data[i] = noise;
-          data[i + 1] = noise;
-          data[i + 2] = noise;
-          data[i + 3] = 40;
-        }
-        gCtx.putImageData(gImgData, 0, 0);
-
-        ctx.globalAlpha = colorGrading.filmGrain.strength * 0.5;
-        ctx.globalCompositeOperation = "overlay";
-        const pat = ctx.createPattern(grainCanvas, "repeat");
-        ctx.fillStyle = pat;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.globalAlpha = 1.0;
-        ctx.globalCompositeOperation = "source-over";
-      }
+      drawColorGradingOverlays(ctx, canvas.width, canvas.height, colorGrading);
 
       const dataUrl = canvas.toDataURL("image/png");
       const a = document.createElement("a");
@@ -1150,8 +1215,43 @@ export default function LayersStudio({
     }
   };
 
+  const handleLocalExport = async () => {
+    const base = localImageRef.current?.image;
+    const overlay = drawingCanvasRef.current;
+    if (!base || !overlay || !localCanvasReady || uploading || localExporting || localHistoryBusy) return;
+    const revision = localRevisionRef.current;
+    setLocalExporting(true);
+    let url;
+    try {
+      const merged = document.createElement("canvas");
+      merged.width = base.naturalWidth; merged.height = base.naturalHeight;
+      const ctx = merged.getContext("2d");
+      ctx.drawImage(base, 0, 0);
+      ctx.drawImage(overlay, 0, 0);
+      const output = document.createElement("canvas");
+      output.width = merged.width; output.height = merged.height;
+      const filtered = output.getContext("2d");
+      filtered.filter = getColorGradingCSSFilter();
+      filtered.drawImage(merged, 0, 0);
+      filtered.filter = "none";
+      drawColorGradingOverlays(filtered, output.width, output.height, colorGrading);
+      const blob = await new Promise((resolve, reject) => output.toBlob(value => value ? resolve(value) : reject(new Error("EXPORT_FAILED")), "image/png"));
+      if (!localAliveRef.current || revision !== localRevisionRef.current) return;
+      url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "fyt-local-edit.png";
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch {
+      if (localAliveRef.current) toast.error(localCopy("导出失败，图片仍保留在当前页面。", "Export failed. The image is still available in this page."));
+    } finally {
+      if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (localAliveRef.current) setLocalExporting(false);
+    }
+  };
+
   // Load Seedream Wild Beauty 5-Layer Decomposition Example via CDN
   const handleLoadSampleLayers = () => {
+    if (localOnly) return;
     setCurrentImageUrl(
       "https://cdn.muapi.ai/assets/1786019968051_cKRYLHHu.png",
     );
@@ -1169,6 +1269,7 @@ export default function LayersStudio({
 
   // Explicit Side Tool Execution Handler
   const handleExecuteSideTool = async (toolId) => {
+    if (localOnly) return;
     if (!apiKey) {
       toast.error(copy.toasts.apiKeyMissing);
       return;
@@ -1240,6 +1341,7 @@ export default function LayersStudio({
   };
 
   const handleDownloadSingle = async (url, filename) => {
+    if (localOnly) return;
     try {
       const resp = await fetch(url);
       const blob = await resp.blob();
@@ -1296,7 +1398,11 @@ export default function LayersStudio({
   };
 
   return (
-    <div className="relative w-full h-full bg-[#121318] text-white flex overflow-hidden font-sans select-none">
+    <div className={`relative w-full h-full bg-[#121318] text-white flex overflow-hidden font-sans select-none ${localOnly ? "flex-col md:flex-row" : ""}`}
+      onDragEnter={localOnly ? handleDropzoneDragEnter : undefined}
+      onDragLeave={localOnly ? handleDropzoneDragLeave : undefined}
+      onDragOver={localOnly ? handleDropzoneDragOver : undefined}
+      onDrop={localOnly ? handleDropzoneDrop : undefined}>
       <Toaster
         position="top-center"
         toastOptions={{
@@ -1313,7 +1419,7 @@ export default function LayersStudio({
         type="file"
         ref={fileInputRef}
         onChange={handleFileInputChange}
-        accept="image/*"
+        accept={localOnly ? "image/png,image/jpeg,image/webp" : "image/*"}
         className="hidden"
       />
 
@@ -1366,7 +1472,7 @@ export default function LayersStudio({
         onMouseMove={doPan}
         onMouseUp={stopPan}
         onMouseLeave={stopPan}
-        className={`flex-1 relative h-full flex flex-col items-center justify-center p-4 pb-28 overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1d2029] via-[#0f1015] to-[#08090c] ${
+        className={`flex-1 min-h-0 relative h-full flex flex-col items-center justify-center p-4 pb-28 overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1d2029] via-[#0f1015] to-[#08090c] ${
           activeTool === "hand" ? "cursor-grab active:cursor-grabbing" : ""
         }`}
       >
@@ -1380,11 +1486,11 @@ export default function LayersStudio({
             filter: getColorGradingCSSFilter(),
           }}
         >
-          {uploading ? (
+          {uploading && !localOnly ? (
             <div className="flex flex-col items-center justify-center p-12 bg-[#1a1c23]/80 backdrop-blur-md rounded-3xl border border-white/10">
               <div className="w-12 h-12 border-4 border-[#84cc16]/20 border-t-[#84cc16] rounded-full animate-spin mb-4" />
               <p className="text-sm font-semibold text-white/80">
-                Uploading image... {uploadProgress}%
+                {localOnly ? localCopy("正在本地读取图片…", "Reading image locally…") : `Uploading image... ${uploadProgress}%`}
               </p>
             </div>
           ) : currentImageUrl ? (
@@ -1415,7 +1521,7 @@ export default function LayersStudio({
                 src={currentImageUrl}
                 alt="Main canvas"
                 onLoad={syncCanvasDimensions}
-                className={`max-h-[72vh] max-w-[70vw] object-contain transition-opacity duration-300 pointer-events-none ${
+                className={`${localOnly ? "max-h-[35vh] md:max-h-[62vh] max-w-[85vw] md:max-w-[50vw]" : "max-h-[72vh] max-w-[70vw]"} object-contain transition-opacity duration-300 pointer-events-none ${
                   decomposedLayers.length > 0
                     ? "opacity-30 blur-[1px]"
                     : "opacity-100"
@@ -1515,7 +1621,7 @@ export default function LayersStudio({
                   />
                   <button
                     onClick={handleRunRegionalEdit}
-                    disabled={isProcessing}
+                    disabled={localOnly || isProcessing}
                     className="w-7 h-7 rounded-full bg-[#84cc16] hover:bg-[#a3e635] text-black flex items-center justify-center shadow-[0_0_12px_rgba(132,204,22,0.6)] transition-all hover:scale-105 active:scale-95 flex-shrink-0"
                     title={copy.tools.runSelectionEdit}
                   >
@@ -1633,7 +1739,7 @@ export default function LayersStudio({
                 Click or Drop Image Here
               </p>
               <p className="text-xs text-white/50">
-                Supports PNG, JPEG, WEBP up to 20MB
+                {localOnly ? localCopy("PNG/JPEG/WebP，最大10MB，仅在本地处理", "PNG/JPEG/WebP up to 10MB, processed locally") : "Supports PNG, JPEG, WEBP up to 20MB"}
               </p>
             </div>
           )}
@@ -1801,7 +1907,7 @@ export default function LayersStudio({
               <div className="flex items-center gap-1 border-l border-white/10 pl-3">
                 <button
                   onClick={handleUndo}
-                  disabled={historyIndex < 0}
+                  disabled={historyIndex < 0 || (localOnly && (localHistoryBusy || (localHistoryTruncated && historyIndex === 0)))}
                   className="p-1.5 text-white/70 hover:text-white disabled:opacity-30 rounded-lg hover:bg-white/5"
                   title={copy.tools.undoStroke}
                 >
@@ -1809,7 +1915,7 @@ export default function LayersStudio({
                 </button>
                 <button
                   onClick={handleRedo}
-                  disabled={historyIndex >= historyStack.length - 1}
+                  disabled={historyIndex >= historyStack.length - 1 || (localOnly && localHistoryBusy)}
                   className="p-1.5 text-white/70 hover:text-white disabled:opacity-30 rounded-lg hover:bg-white/5"
                   title={copy.tools.redoStroke}
                 >
@@ -1827,7 +1933,7 @@ export default function LayersStudio({
           )}
 
           {/* Bottom Floating Micro Toolbar */}
-          <div className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1b1e26]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_12px_35px_rgba(0,0,0,0.6)]">
+          <div className={`flex items-center gap-1.5 px-3.5 py-2 bg-[#1b1e26]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_12px_35px_rgba(0,0,0,0.6)] ${localOnly ? "flex-wrap justify-center" : ""}`}>
             <button
               onClick={() => setActiveTool("pointer")}
               className={`p-2 rounded-xl transition-all ${
@@ -1872,6 +1978,9 @@ export default function LayersStudio({
             </button>
 
             <button
+              disabled={localOnly}
+              aria-disabled={localOnly}
+              style={localOnly ? { opacity: 0.3 } : undefined}
               onClick={() =>
                 setActiveTool(activeTool === "lasso" ? "pointer" : "lasso")
               }
@@ -1902,6 +2011,9 @@ export default function LayersStudio({
             </button>
 
             <button
+              disabled={localOnly}
+              aria-disabled={localOnly}
+              style={localOnly ? { opacity: 0.3 } : undefined}
               onClick={() =>
                 setActiveTool(
                   activeTool === "regional-edit" ? "pointer" : "regional-edit",
@@ -2035,7 +2147,9 @@ export default function LayersStudio({
           </div>
 
           {/* Bottom Floating Main Prompt Bar */}
-          <div className="w-full relative flex items-center bg-[#15171e]/95 backdrop-blur-xl border border-white/10 rounded-full px-4 py-2 shadow-[0_15px_40px_rgba(0,0,0,0.6)]">
+          {localOnly && !preserveOriginalPanel ? <div className="w-full rounded-2xl bg-[#15171e]/95 border border-white/10 px-4 py-3 text-xs text-white/60">
+            {localCopy("本地标注与调色 · 不上传、不扣费 · 刷新后需重新导入", "Local annotation and grading · No upload or charge · Re-import after refresh")}
+          </div> : <div className="w-full relative flex items-center bg-[#15171e]/95 backdrop-blur-xl border border-white/10 rounded-full px-4 py-2 shadow-[0_15px_40px_rgba(0,0,0,0.6)]">
             <button
               onClick={() => fileInputRef.current?.click()}
               className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all mr-2 flex-shrink-0"
@@ -2069,7 +2183,7 @@ export default function LayersStudio({
 
             <button
               onClick={() => handleDecompose()}
-              disabled={isProcessing}
+              disabled={localOnly || isProcessing}
               className="w-10 h-10 rounded-full bg-[#84cc16] hover:bg-[#a3e635] text-black flex items-center justify-center shadow-[0_0_20px_rgba(132,204,22,0.5)] transition-all hover:scale-105 active:scale-95 disabled:opacity-50 ml-2 flex-shrink-0"
               title={copy.tools.runLayerDecomposition}
             >
@@ -2084,13 +2198,37 @@ export default function LayersStudio({
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
+      {localOnly && preserveOriginalPanel && !isSidebarOpen && <button type="button" className="absolute top-3 right-3 z-40 rounded-xl border border-white/10 bg-[#242833] px-4 py-2 text-xs text-white/80" onClick={() => setIsSidebarOpen(true)}>{localCopy("打开工具面板", "Open tool panel")}</button>}
       {/* Right Inspector Panel */}
-      {isSidebarOpen && (
-        <div className="w-[380px] h-full bg-[#242833] border-l border-white/10 flex flex-col justify-between z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] animate-fade-in">
+      {localOnly && !preserveOriginalPanel ? <aside className="w-full md:w-64 md:max-w-[42vw] max-h-[40%] md:max-h-none md:h-full shrink-0 bg-[#242833] border-l border-white/10 p-4 overflow-y-auto z-20">
+        <h2 className="text-sm font-bold mb-3">{localCopy("本地图片编辑", "Local image editor")}</h2>
+        {uploading && <p role="status" className="text-xs text-lime-300 mb-2">{localCopy("正在本地读取图片…", "Reading image locally…")}</p>}
+        <p className="text-xs text-white/50 mb-5">{localCopy("画笔、橡皮、形状、缩放和平移可用。AI分层、抠图、超分和文字替换尚未接入。", "Draw, erase, add shapes, zoom and pan. AI layers, background removal, upscaling and text replacement are not connected.")}</p>
+        {[
+          ["exposure", "stops", localCopy("曝光", "Exposure"), -2, 2, 0.1],
+          ["colorCorrect", "contrast", localCopy("对比度", "Contrast"), -100, 100, 1],
+          ["colorCorrect", "saturation", localCopy("饱和度", "Saturation"), -100, 100, 1],
+          ["colorCorrect", "hue", localCopy("色相", "Hue"), -180, 180, 1],
+        ].map(([category, property, label, min, max, step]) => <label key={property} className="block text-xs text-white/70 mb-5">
+          <span className="flex justify-between mb-2"><span>{label}</span><span>{colorGrading[category][property]}</span></span>
+          <input aria-label={label} type="range" className="w-full accent-lime-400" min={min} max={max} step={step} disabled={!currentImageUrl || uploading} value={colorGrading[category][property]} onChange={e => setColorGrading(previous => ({ ...previous, [category]: { ...previous[category], [property]: Number(e.target.value) } }))} />
+        </label>)}
+        <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+          <button onClick={handleUndo} disabled={historyIndex < 0 || uploading || localHistoryBusy || (localHistoryTruncated && historyIndex === 0)} className="bg-white/5 rounded-lg p-2 disabled:opacity-30">{localCopy("撤销", "Undo")}</button>
+          <button onClick={handleRedo} disabled={historyIndex >= historyStack.length - 1 || uploading || localHistoryBusy} className="bg-white/5 rounded-lg p-2 disabled:opacity-30">{localCopy("重做", "Redo")}</button>
+          <button onClick={clearDrawingCanvas} disabled={!currentImageUrl || uploading} className="bg-white/5 rounded-lg p-2 disabled:opacity-30">{localCopy("清除标注", "Clear drawing")}</button>
+          <button onClick={handleResetAllColorGrading} className="bg-white/5 rounded-lg p-2">{localCopy("重置调色", "Reset grading")}</button>
+        </div>
+        <button onClick={handleLocalExport} disabled={!localCanvasReady || uploading || localExporting || localHistoryBusy} className="w-full bg-[#84cc16] text-black text-xs font-bold p-3 rounded-xl disabled:opacity-30">{localExporting ? localCopy("导出中…", "Exporting…") : localCopy("导出PNG", "Export PNG")}</button>
+        <p className="text-[11px] text-white/35 mt-3">{localCopy("撤销最多20步，大图可能减少可恢复步数。", "Undo keeps up to 20 states; large images may retain fewer.")}</p>
+        <p className="text-[11px] text-white/35 mt-3">{localCopy("图片与标注仅存在本页内存。切换账号或刷新会清空；离开前请导出。", "Image and annotations stay in page memory only. Account changes and reloads clear them; export first.")}</p>
+      </aside> : isSidebarOpen && (
+        <div className={`${localOnly ? "w-full md:w-[380px] max-h-[40%] md:max-h-none shrink-0" : "w-[380px]"} h-full bg-[#242833] border-l border-white/10 flex flex-col justify-between z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] animate-fade-in`}>
+          {localOnly && <div className="border-b border-white/10 p-3 text-xs text-lime-200/80" role="status">{localCopy("原版完整工具面板 · 本地标注与调色可用；AI分层、抠图、超分等执行尚未接入。", "Original tool panel · Local drawing and grading available. AI layers, background removal and upscaling are not connected.")}</div>}
           {/* Top Header & Panel Content */}
           <div className="p-5 flex-1 overflow-y-auto custom-scrollbar">
             {/* Header with Back, Title & Close */}
@@ -2220,7 +2358,8 @@ export default function LayersStudio({
               <div className="space-y-4">
                 {/* Hero Feature Card with 5 CDN Layers */}
                 <div
-                  onClick={handleLoadSampleLayers}
+                  aria-disabled={localOnly}
+                  onClick={localOnly ? undefined : handleLoadSampleLayers}
                   className="group w-full bg-[#f4f4f7] hover:bg-white rounded-3xl p-3 shadow-lg overflow-hidden border border-white/20 cursor-pointer transition-all duration-200 hover:scale-[1.01]"
                   title={copy.sample.clickToLoad}
                 >
@@ -3898,7 +4037,7 @@ export default function LayersStudio({
                 />
                 <button
                   onClick={() => handleExecuteSideTool("edit-text")}
-                  disabled={isProcessing}
+                  disabled={localOnly || isProcessing}
                   className="w-full py-2 bg-[#84cc16] hover:bg-[#a3e635] text-black font-bold text-xs uppercase rounded-xl shadow-md"
                 >
                   {isProcessing ? copy.editText.processing : copy.editText.run}
@@ -3916,7 +4055,7 @@ export default function LayersStudio({
                 </p>
                 <button
                   onClick={() => handleExecuteSideTool("enhancer")}
-                  disabled={isProcessing}
+                  disabled={localOnly || isProcessing}
                   className="w-full py-2 bg-[#84cc16] hover:bg-[#a3e635] text-black font-bold text-xs uppercase rounded-xl shadow-md"
                 >
                   {isProcessing ? copy.enhancer.processing : copy.enhancer.run}
@@ -3934,7 +4073,7 @@ export default function LayersStudio({
                 </p>
                 <button
                   onClick={() => handleExecuteSideTool("relight")}
-                  disabled={isProcessing}
+                  disabled={localOnly || isProcessing}
                   className="w-full py-2 bg-[#84cc16] hover:bg-[#a3e635] text-black font-bold text-xs uppercase rounded-xl shadow-md"
                 >
                   {isProcessing ? copy.relight.processing : copy.relight.run}
@@ -3952,7 +4091,7 @@ export default function LayersStudio({
                 </p>
                 <button
                   onClick={() => handleExecuteSideTool("angles")}
-                  disabled={isProcessing}
+                  disabled={localOnly || isProcessing}
                   className="w-full py-2 bg-[#84cc16] hover:bg-[#a3e635] text-black font-bold text-xs uppercase rounded-xl shadow-md"
                 >
                   {isProcessing ? copy.angles.processing : copy.angles.run}
@@ -3966,7 +4105,7 @@ export default function LayersStudio({
             {activeSideTab === "layer-decomposition" ? (
               <button
                 onClick={() => handleDecompose()}
-                disabled={isProcessing}
+                disabled={localOnly || isProcessing}
                 className="w-full py-3.5 bg-[#e2f924] hover:bg-[#d4ed1b] active:scale-[0.98] text-black font-extrabold text-sm rounded-2xl shadow-[0_4px_25px_rgba(226,249,36,0.35)] transition-all flex items-center justify-center gap-2 tracking-tight disabled:opacity-50"
               >
                 {isProcessing ? (
@@ -3988,7 +4127,7 @@ export default function LayersStudio({
             ) : activeSideTab === "upscale" ? (
               <button
                 onClick={handleRunUpscale}
-                disabled={isProcessing}
+                disabled={localOnly || isProcessing}
                 className="w-full py-3.5 bg-[#e2f924] hover:bg-[#d4ed1b] active:scale-[0.98] text-black font-extrabold text-sm rounded-2xl shadow-[0_4px_25px_rgba(226,249,36,0.35)] transition-all flex items-center justify-center gap-2 tracking-tight disabled:opacity-50"
               >
                 {isProcessing ? (
@@ -4054,7 +4193,7 @@ export default function LayersStudio({
             ) : activeSideTab === "remove-bg" ? (
               <button
                 onClick={handleRunRemoveBg}
-                disabled={isProcessing}
+                disabled={localOnly || isProcessing}
                 className="w-full py-3.5 bg-[#e2f924] hover:bg-[#d4ed1b] active:scale-[0.98] text-black font-extrabold text-sm rounded-2xl shadow-[0_4px_25px_rgba(226,249,36,0.35)] transition-all flex items-center justify-center gap-2 tracking-tight disabled:opacity-50"
               >
                 {isProcessing ? (
@@ -4076,7 +4215,7 @@ export default function LayersStudio({
             ) : activeSideTab === "expand-crop" ? (
               <button
                 onClick={handleRunExpand}
-                disabled={isProcessing}
+                disabled={localOnly || isProcessing}
                 className="w-full py-3.5 bg-[#e2f924] hover:bg-[#d4ed1b] active:scale-[0.98] text-black font-extrabold text-sm rounded-2xl shadow-[0_4px_25px_rgba(226,249,36,0.35)] transition-all flex items-center justify-center gap-2 tracking-tight disabled:opacity-50"
               >
                 {isProcessing ? (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ImageStudio, VideoStudio, ClippingStudio, MotionControlStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, LayersStudio, getUserBalance } from 'studio';
@@ -10,6 +10,12 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
   loading: () => <div className="h-full w-full bg-black flex items-center justify-center text-white/20">Loading Design Studio...</div>
 });
 import axios from 'axios';
+import FytAgentStudio from '@/components/fyt/FytAgentStudio';
+import FytAppsStudio from '@/components/fyt/FytAppsStudio';
+import FytImageStudio from '@/components/fyt/FytImageStudio';
+import FytCanvasStudio from '@/components/fyt/FytCanvasStudio';
+import { generatedImageFile } from '@/lib/fyt/image-transfer.mjs';
+import { getSessionRevision, getSessionState } from '@/lib/fyt/session.mjs';
 import ApiKeyModal from './ApiKeyModal';
 import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locales';
 
@@ -297,7 +303,18 @@ const persistNotifications = (notifications) => {
   }
 };
 
-export default function StandaloneShell({ locale = 'en' }) {
+export default function StandaloneShell({ locale = 'en', fyt = null }) {
+  const fytMode = Boolean(fyt);
+  const [imageTransfer, setImageTransfer] = useState(null);
+  const [transferPending, setTransferPending] = useState(false);
+  const [transferMessage, setTransferMessage] = useState('');
+  const transferLock = useRef(false);
+  const transferId = useRef(null);
+  const transferAlive = useRef(true);
+  useEffect(() => {
+    transferAlive.current = true;
+    return () => { transferAlive.current = false; };
+  }, []);
   const params = useParams();
   const router = useRouter();
   const slug = params?.slug || [];
@@ -306,14 +323,14 @@ export default function StandaloneShell({ locale = 'en' }) {
 
   const copy = getCommonCopy(locale);
   const tabLabel = useCallback(
-    (tabId) => copy.tabs?.[tabId] || TABS.find((t) => t.id === tabId)?.label || tabId,
-    [copy],
+    (tabId) => fytMode && tabId === 'design-agent' ? (locale === 'zh' ? '无限画布' : 'Infinite canvas') : copy.tabs?.[tabId] || TABS.find((t) => t.id === tabId)?.label || tabId,
+    [copy, fytMode, locale],
   );
   const categoryLabel = useCallback(
     (categoryId) => copy.categories?.[categoryId] || NAVIGATION_CATEGORIES.find((c) => c.id === categoryId)?.label || categoryId,
     [copy],
   );
-  const studioPath = useCallback((tabId) => localizeStudioPath(locale, tabId), [locale]);
+  const studioPath = useCallback((tabId) => `${fytMode ? '/create' : ''}${localizeStudioPath(locale, tabId)}`, [locale, fytMode]);
 
   // Helper to extract workflow details precisely from either route structure
   const getWorkflowInfo = useCallback(() => {
@@ -402,6 +419,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   const [generationCounts, setGenerationCounts] = useState({});
 
   useEffect(() => {
+    if (fytMode) return;
     setNotifications(loadStoredNotifications());
     setNotificationsHydrated(true);
   }, []);
@@ -509,7 +527,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   // Popstate event listener to sync tab state with URL on back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
+      const path = fytMode ? window.location.pathname.replace(/^\/create(?=\/|$)/, '') : window.location.pathname;
       // Strip the locale root prefix (if any) before reading the
       // /studio/<tab> segment, so this works for both /studio/<tab> and
       // /<locale>/studio/<tab>.
@@ -523,12 +541,48 @@ export default function StandaloneShell({ locale = 'en' }) {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [locale]);
+  }, [locale, fytMode]);
 
   const handleTabChange = useCallback((tabId) => {
     window.history.pushState(null, '', studioPath(tabId));
     setActiveTab(tabId);
   }, [studioPath]);
+
+  const handleImageTransferComplete = useCallback((id, success) => {
+    if (!transferAlive.current || transferId.current !== id) return;
+    transferId.current = null;
+    setImageTransfer(current => current?.id === id ? null : current);
+    transferLock.current = false;
+    setTransferPending(false);
+    setTransferMessage(success
+      ? (locale === 'zh' ? '图片已转入，可继续编辑。此操作不扣费。' : 'Image transferred. Continue editing at no additional charge.')
+      : (locale === 'zh' ? '未转入图片，原内容已保留。可返回图片工作室重新选择。' : 'Image not transferred. Existing content retained. Choose it again in Image Studio.'));
+  }, [locale]);
+
+  const handleGeneratedImageOpen = useCallback(async (entry, target) => {
+    if (!fytMode || !fyt.userId || transferLock.current || !['layers', 'design-agent'].includes(target)) return;
+    transferLock.current = true;
+    setTransferPending(true); setTransferMessage('');
+    const revision = getSessionRevision();
+    let queued = false;
+    try {
+      const file = await generatedImageFile(entry);
+      if (!transferAlive.current || revision !== getSessionRevision() || getSessionState().user?.id !== fyt.userId) return;
+      const id = crypto.randomUUID();
+      transferId.current = id;
+      setImageTransfer({ id, target, file });
+      queued = true;
+      handleTabChange(target);
+    } catch {
+      if (transferAlive.current) setTransferMessage(locale === 'zh' ? '图片无法转入：仅支持不超过10MB的PNG/JPEG/WebP。原内容已保留。' : 'Cannot transfer image. Use PNG/JPEG/WebP up to 10MB. Existing content retained.');
+    } finally {
+      // The destination owns the lock once a transfer has been queued.
+      if (!queued) {
+        transferLock.current = false;
+        if (transferAlive.current) setTransferPending(false);
+      }
+    }
+  }, [fytMode, fyt?.userId, locale, handleTabChange]);
 
   const handleOpenNotification = useCallback((notification) => {
     handleTabChange(notification.tabId);
@@ -552,6 +606,7 @@ export default function StandaloneShell({ locale = 'en' }) {
 
   // Auto-hide header when inside a specific workflow view or design agent
   useEffect(() => {
+    if (fytMode) { setIsHeaderVisible(true); return; }
     const isEditingWorkflow = (activeTab === 'workflows' || !!idFromParams) && urlWorkflowId;
     const isDesignAgent = activeTab === 'design-agent';
     
@@ -564,6 +619,7 @@ export default function StandaloneShell({ locale = 'en' }) {
 
   // Global builder CSS cleanup when switching away from Workflows or Design Agent tabs
   useEffect(() => {
+    if (fytMode) return;
     const fromBuilder = sessionStorage.getItem("fromWorkflowBuilder");
     const fromDesignAgent = sessionStorage.getItem("fromDesignAgent");
     
@@ -576,6 +632,7 @@ export default function StandaloneShell({ locale = 'en' }) {
 
   useEffect(() => {
     setHasMounted(true);
+    if (fytMode) return;
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       setApiKey(stored);
@@ -583,7 +640,7 @@ export default function StandaloneShell({ locale = 'en' }) {
       // Sync cookie immediately on mount to establish identity for background requests
       document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
     }
-  }, [fetchBalance]);
+  }, [fetchBalance, fytMode]);
 
   const handleKeySave = useCallback((key) => {
     localStorage.setItem(STORAGE_KEY, key);
@@ -603,6 +660,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   // We use an interceptor to be selective and NOT send the key to external domains like S3
   useEffect(() => {
     // Safety: Clear any global defaults that might have been set previously
+    if (fytMode) return;
     delete axios.defaults.headers.common['x-api-key'];
 
     if (!apiKey) return;
@@ -658,6 +716,7 @@ export default function StandaloneShell({ locale = 'en' }) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (fytMode) return;
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
@@ -675,7 +734,7 @@ export default function StandaloneShell({ locale = 'en' }) {
     </div>
   );
 
-  if (!apiKey) {
+  if (!apiKey && !fytMode) {
     return <ApiKeyModal onSave={handleKeySave} locale={locale} />;
   }
 
@@ -705,7 +764,7 @@ export default function StandaloneShell({ locale = 'en' }) {
       )}
 
       {/* Vadoo promo banner */}
-      {showVadooBanner && (
+      {showVadooBanner && !fytMode && (
         <div className="flex-shrink-0 w-full bg-indigo-600 flex items-center justify-center px-4 py-2 gap-3 relative z-50">
           <a
             href="https://vadoo.tv"
@@ -727,6 +786,8 @@ export default function StandaloneShell({ locale = 'en' }) {
           </button>
         </div>
       )}
+
+      {fytMode && <div className="flex-shrink-0 bg-indigo-600 text-white text-center text-xs py-2 px-4">{locale === 'zh' ? 'GPT Image 2 单张生图已接入 · 文本助手、本地编辑与无限画布可用 · 视频生成未开放' : 'GPT Image 2 single-image generation connected · Text, editing and canvas available · Video unavailable'}</div>}
 
       {/* Header */}
       {isHeaderVisible && (
@@ -796,6 +857,7 @@ export default function StandaloneShell({ locale = 'en' }) {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
+            {fytMode ? fyt.controls : <>
             <div className="flex items-center gap-2.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-xs font-bold text-white/90">
@@ -814,6 +876,7 @@ export default function StandaloneShell({ locale = 'en' }) {
               </svg>
               <span className="hidden sm:inline">{copy.shell.settings}</span>
             </button>
+            </>}
           </div>
         </header>
       )}
@@ -973,8 +1036,23 @@ export default function StandaloneShell({ locale = 'en' }) {
           </aside>
         )}
 
+        {fytMode && transferMessage && <div role="status" className="flex items-center justify-between gap-3 border-b border-cyan-400/20 bg-cyan-400/5 px-4 py-2 text-xs text-cyan-200">
+          <span>{transferMessage}</span><button type="button" onClick={() => setTransferMessage('')} aria-label={locale === 'zh' ? '关闭提示' : 'Dismiss'} className="px-2 py-1">×</button>
+        </div>}
         {/* Studio Content */}
         <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
+        {fytMode ? <>
+          <div className={activeTab === 'image' ? 'h-full w-full' : 'hidden'}><FytImageStudio locale={locale} userId={fyt.userId} active={activeTab === 'image'} onSettled={fyt.onGenerationSettled} onOpenImage={handleGeneratedImageOpen} transferring={transferPending} /></div>
+          <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><VideoStudio locale={locale} previewMode persistenceId={fyt.userId} /></div>
+          <div className={activeTab === 'layers' ? 'h-full w-full' : 'hidden'}><LayersStudio locale={locale} localOnly preserveOriginalPanel active={activeTab === 'layers'} incomingImage={imageTransfer?.target === 'layers' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
+          <div className={activeTab === 'agents' ? 'h-full w-full' : 'hidden'}><FytAgentStudio locale={locale} userId={fyt.userId} enabled={activeTab === 'agents'} onSettled={fyt.onGenerationSettled} /></div>
+          <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio locale={locale} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
+          {activeTab === 'apps' && <FytAppsStudio locale={locale} hrefForTab={studioPath} onNavigate={handleNavigationItemClick} />}
+          {!['image', 'video', 'agents', 'layers', 'apps', 'design-agent'].includes(activeTab) && <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
+              <h1 className="text-3xl font-black text-white">{tabLabel(activeTab)}</h1>
+              <p className="text-white/40 text-sm">{locale === 'zh' ? (activeTab === 'workflows' ? '工作流编辑与执行尚未接入，可先使用智能体中的文本助手。' : '此工具尚未接入 fyt。可使用文本助手，或预览图片和视频工作室。') : 'This tool is not connected to fyt yet. Use text assistants, or preview the image and video studios.'}</p>
+            </div>}
+        </> : <>
         <div className={activeTab === 'image' ? "h-full w-full" : "hidden"}>
           <ImageStudio apiKey={apiKey} locale={locale} droppedFiles={droppedFiles} onFilesHandled={handleFilesHandled} onGenerationStart={makeGenerationStartCallback('image')} onGenerationEnd={makeGenerationEndCallback('image')} onGenerationComplete={makeSuccessCallback('image')} onGenerationError={makeErrorCallback('image')} />
         </div>
@@ -1048,6 +1126,7 @@ export default function StandaloneShell({ locale = 'en' }) {
             onGenerationError={makeErrorCallback('ai-influencer')}
           />
         </div>
+        </>}
       </div>
     </div>
 
@@ -1173,7 +1252,7 @@ export default function StandaloneShell({ locale = 'en' }) {
       `}</style>
 
       {/* Settings Modal */}
-      {showSettings && (
+      {showSettings && !fytMode && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in-up">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 w-full max-w-sm shadow-2xl">
             <h2 className="text-white font-bold text-lg mb-2">{copy.settingsModal.title}</h2>

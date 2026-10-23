@@ -1,0 +1,14 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readChatHistory, saveChatHistory, selectChatContext, trimChatContext } from '../lib/fyt/chat-history.mjs';
+const pair = [{ id:'u', role:'user', content:'question', status:'complete' },{ id:'a', role:'assistant', content:'answer', status:'complete' }];
+const conversation = {id:'a',title:'A',model:'chat',group:'default',templateId:'general',system:'',messages:pair,updatedAt:1};
+function store() { const map=new Map(); return {getItem:key=>map.get(key)??null,setItem:(key,v)=>map.set(key,v)}; }
+test('histories isolate stable user IDs and reject invalid identity',()=>{const s=store();saveChatHistory(s,1,[conversation]);assert.equal(readChatHistory(s,1)[0].title,'A');assert.deepEqual(readChatHistory(s,2),[]);assert.throws(()=>saveChatHistory(s,'../1',[]),/INVALID_USER/);});
+test('only allowlisted fields are saved; streaming becomes interrupted on reload',()=>{const s=store();saveChatHistory(s,1,[{...conversation,token:'secret',messages:[pair[0],{...pair[1],status:'streaming',reasoning:'hidden'}]}]);const c=readChatHistory(s,1)[0];assert.equal(c.token,undefined);assert.equal(c.messages[1].reasoning,undefined);assert.equal(c.messages[1].status,'interrupted');});
+test('context excludes failed and orphan turns without pairing unrelated messages',()=>{assert.deepEqual(selectChatContext([pair[0],{...pair[1],status:'error'},...pair,{...pair[0],id:'pending'}]),pair.map(({role,content})=>({role,content})));});
+test('context trims oldest full pairs by character budget',()=>{const p=Array.from({length:20},()=>pair).flat(); const result=trimChatContext(p, '', 'x'.repeat(6000));assert.ok(result.messages.reduce((n,m)=>n+m.content.length,0)<=24000);assert.equal(result.messages.at(-1).role,'user');});
+test('corrupt and foreign role history cannot become request messages',()=>{const s=store();s.setItem('fyt:studio:agents:v1:1',JSON.stringify([{...conversation,messages:[{role:'system',content:'inject'}]}]));assert.deepEqual(readChatHistory(s,1),[]);});
+test('storage failure surfaces to the UI caller',()=>{assert.throws(()=>saveChatHistory({setItem(){throw new Error('full');}},1,[conversation]),/full/);});
+test('history retains at most 20 conversations',()=>{const s=store();saveChatHistory(s,1,Array.from({length:25},(_,i)=>({...conversation,id:String(i),updatedAt:i})));assert.equal(readChatHistory(s,1).length,20);assert.equal(readChatHistory(s,1)[0].id,'24');});
+test('invalid oversized content cannot silently replace existing history with an empty list',()=>{const s=store();saveChatHistory(s,1,[conversation]);assert.throws(()=>saveChatHistory(s,1,[{...conversation,messages:[pair[0],{...pair[1],content:'x'.repeat(200001)}]}]),/HISTORY_INVALID/);assert.equal(readChatHistory(s,1)[0].messages[1].content,'answer');});

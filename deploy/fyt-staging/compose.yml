@@ -1,0 +1,22 @@
+name: fyt-creative-staging
+
+services:
+  studio:
+    image: fyt-studio:staging-editors-20261023-v1
+    build:
+      context: ../..
+      dockerfile: deploy/fyt-staging/Dockerfile
+    restart: unless-stopped
+    networks:
+      fyt:
+        aliases: [fyt-studio]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/create/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+
+networks:
+  fyt:
+    external: true
+    name: fyt-staging_default

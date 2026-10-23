@@ -1,0 +1,42 @@
+name: fyt-studio-validation
+
+services:
+  api:
+    image: fyt-studio-validation:c06146b96
+    command: ["--port", "3000", "--log-dir", "/data/logs"]
+    environment:
+      SQLITE_PATH: /data/validation.db
+      SESSION_SECRET: ${FYT_VALIDATION_SESSION_SECRET:?supply the private validation env file}
+      SESSION_COOKIE_SECURE: "false"
+      BATCH_UPDATE_ENABLED: "false"
+      MEMORY_CACHE_ENABLED: "false"
+      VERSION: c06146b96-validation
+      NODE_NAME: studio-validation
+      TZ: Asia/Shanghai
+    volumes:
+      - data:/data
+    networks: [isolated]
+
+  gateway:
+    image: nginx:1.24-alpine
+    ports:
+      - "127.0.0.1:13100:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [api]
+    networks: [edge, isolated]
+
+  mock:
+    image: python:3.12-alpine
+    command: ["python", "/fixture/mock_upstream.py"]
+    volumes:
+      - ./mock_upstream.py:/fixture/mock_upstream.py:ro
+    networks: [isolated]
+
+networks:
+  edge:
+  isolated:
+    internal: true
+
+volumes:
+  data:
