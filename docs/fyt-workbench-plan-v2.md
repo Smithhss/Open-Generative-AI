@@ -253,9 +253,40 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 
 | 项 | 需要什么 |
 |---|---|
-| 图片真实出图 | 预发环境 + 有效图片渠道，核对扣费与上游账单 |
-| 视频真实出片 | 预发环境 + 视频渠道，跑通提交→轮询→content 下载 |
-| 分组与倍率 | 确认 `/pg` 路径的 `IsPlayground` 计费在任务场景下按用户额度结算 |
-| C2 导航收缩 | 待确认后执行 |
+| 图片真实出图 | ~~预发环境 + 有效图片渠道~~ 已验（见下） |
+| 视频真实出片 | 上游账号余额：ai.centos.hk 账户 ¥11.23，最低一档 seedance 需 ¥13.75 |
+| 分组与倍率 | 已验图片按用户额度扣费；视频任务场景未验 |
+| C2 导航收缩 | 完成 |
 | C3 归档 fyt-validation | 待确认预发是否仍依赖 |
+
+### 2026-10-24 第二批（真实渠道验收）
+
+用分支镜像起临时容器（18444，独立 `NODE_NAME`，接同一套 PG/Redis），验证后删除容器与含密钥临时文件。
+
+| 项 | 结果 |
+|---|---|
+| `GET /api/user/models?type=image` | 7 个模型 |
+| `GET /api/user/models?type=video` | 4 个模型 |
+| `POST /pg/images/generations` + `gpt-image-2.5-flare` | 200 / 28s / 2.4MB PNG |
+| 扣费 | 15,003 quota（约 $0.03），与上游 `credits_charged: 1` 一致 |
+| `POST /pg/videos` | 走通鉴权、渠道解析、上游调用；卡在上游余额 |
+
+验收中发现并修复：
+
+| 问题 | 修复 | 提交 |
+|---|---|---|
+| `Path2RelayMode` 无 `/pg` 归一化，图片请求被当文本解析 | 归一化 `/pg/` → `/v1/` | `b2e11b8` |
+| 模型无 endpoints 声明且名称回退太窄，`type=image` 返回 0 条 | 扩展回退规则，允许通用 openai 声明时按名称判断 | `b2e11b8` |
+| 上游只返回 https 外链，前端一律报错 | 接受 https 外链，CSP img-src 放开 https | `7b620c4` |
+| `seconds` 传数字，网关按 OpenAI 规范要字符串 | 改传字符串 | `fa81684` |
+
+预发数据变更（仅 staging，可回滚）：
+
+| 对象 | 变更 | 回滚 |
+|---|---|---|
+| 渠道 28 | `type` 60 → 55（Sora），因上游是 OpenAI `/v1/videos` 协议 | `update channels set type=60 where id=28;` |
+| 用户 1 | 密码重置为 `fyt@202609` | 无（与生产一致） |
+| ModelPrice | 临时加过测试价，已移除 | 已还原 |
+
+遗留建议：fyt 侧增加图片产物代理，避免上游外链过期与跨域下载失败。
 
