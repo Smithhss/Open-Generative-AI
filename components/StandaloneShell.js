@@ -269,6 +269,9 @@ const NAVIGATION_CATEGORIES = [
 
 const EXPLORE_APPS_TAB = TABS.find((tab) => tab.id === 'apps');
 
+// fyt 模式下只展示已接入的入口；其余工具的代码与路由保留，但不占导航。
+const FYT_VISIBLE_TABS = new Set(['image', 'video', 'layers', 'design-agent', 'agents']);
+
 const getNavigationCategory = (tabId) => (
   NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
 );
@@ -306,6 +309,11 @@ const persistNotifications = (notifications) => {
 
 export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const fytMode = Boolean(fyt);
+  const navigationCategories = fytMode
+    ? NAVIGATION_CATEGORIES
+        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => FYT_VISIBLE_TABS.has(tabId)) }))
+        .filter((category) => category.tabIds.length > 0)
+    : NAVIGATION_CATEGORIES;
   const [imageTransfer, setImageTransfer] = useState(null);
   const [transferPending, setTransferPending] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
@@ -903,7 +911,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
           >
             <nav aria-label={copy.shell.studioNavigation} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none py-2 px-2">
               <div className="space-y-1">
-                {NAVIGATION_CATEGORIES.map((category) => {
+                {navigationCategories.map((category) => {
                   const isCategoryActive = activeCategory?.id === category.id;
                   const isCollapsed = isSidebarCollapsed && !isMobileOpen;
                   const isCategoryOpen = !isCollapsed && expandedCategoryId === category.id;
