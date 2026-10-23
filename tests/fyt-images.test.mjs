@@ -12,9 +12,11 @@ test('single image request excludes unknown model parameters and batch counts', 
     {model:'flux-1.1',group:'default',prompt:'hello',n:1,response_format:'b64_json',stream:false});
   for (const params of [{model:'',group:'default',prompt:'hi'},{model:'gpt-image-2',group:'',prompt:'hi'},{model:'gpt-image-2',group:'default',prompt:' '.repeat(5)}]) assert.throws(()=>imageGenerationBody(params));
 });
-test('image response accepts raster base64 but rejects external URLs and active payloads', () => {
+test('image response accepts raster base64 and https artifact urls, rejects active payloads', () => {
   assert.equal(normalizeGeneratedImage({data:[{b64_json:'iVBORw0KGgo='}]}).mime,'image/png');
-  for (const body of [{data:[]},{data:[{url:'https://example.com/image.png'}]},{data:[{b64_json:'PHN2Zz4='}]},{data:[{b64_json:'data:image/png;base64,AAAA'}]}]) assert.throws(()=>normalizeGeneratedImage(body));
+  const remote = normalizeGeneratedImage({data:[{url:'https://cdn.example.com/a.png'}]});
+  assert.deepEqual(remote, {url:'https://cdn.example.com/a.png', mime:'image/*', external:true});
+  for (const body of [{data:[]},{data:[{url:'http://cdn.example.com/a.png'}]},{data:[{url:'javascript:alert(1)'}]},{data:[{b64_json:'PHN2Zz4='}]},{data:[{b64_json:'data:image/png;base64,AAAA'}]}]) assert.throws(()=>normalizeGeneratedImage(body));
 });
 
 test('inline downloads decode locally without a fetch blocked by CSP', async () => {

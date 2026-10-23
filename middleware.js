@@ -17,7 +17,7 @@ function addSecurityHeaders(response) {
     response.headers.set(
         'Content-Security-Policy',
         process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt'
-            ? "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.muapi.ai https://d3adwkbyhxyrtq.cloudfront.net; media-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:;"
+            ? "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:;"
             : "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://muapi.ai https://*.muapi.ai; font-src 'self' data:;"
     );
     return response;
