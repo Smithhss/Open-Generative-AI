@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import {
   videoRequestBody,
   normalizeVideoTask,
+  normalizeStatus,
   isTerminalStatus,
   isSuccessStatus,
   fytVideoContentUrl,
   createFytVideo,
   fetchFytVideo,
+  saveVideoTask,
+  loadVideoTask,
+  clearVideoTask,
 } from '../lib/fyt/videos.mjs';
 
 test('video request keeps only supported parameters', () => {
@@ -26,15 +30,56 @@ test('video request keeps only supported parameters', () => {
 test('task response accepts id or task_id and rejects empty payloads', () => {
   assert.deepEqual(normalizeVideoTask({ id: 'task-1', status: 'queued', model: 'kling-v2' }), { id: 'task-1', status: 'queued', model: 'kling-v2' });
   assert.equal(normalizeVideoTask({ task_id: 'task-2' }).id, 'task-2');
+  // 网关查询接口把任务包在 data 里。
+  assert.deepEqual(normalizeVideoTask({ code: 'success', data: { id: 'task-3', status: 'SUCCESS' } }), { id: 'task-3', status: 'completed', model: '' });
   for (const body of [{}, { id: '' }, { id: 42 }]) assert.throws(() => normalizeVideoTask(body), /INVALID_VIDEO_RESPONSE/);
+});
+
+test('status vocabulary from the gateway is normalized before comparison', () => {
+  assert.equal(normalizeStatus('SUCCESS'), 'completed');
+  assert.equal(normalizeStatus('completed'), 'completed');
+  assert.equal(normalizeStatus('IN_PROGRESS'), 'in_progress');
+  assert.equal(normalizeStatus('QUEUED'), 'queued');
+  assert.equal(normalizeStatus('FAILED'), 'failed');
+  assert.equal(normalizeStatus(''), 'unknown');
+  assert.equal(normalizeStatus(undefined), 'unknown');
 });
 
 test('status helpers treat failures as terminal and only completed as success', () => {
   assert.equal(isTerminalStatus('completed'), true);
   assert.equal(isTerminalStatus('failed'), true);
   assert.equal(isTerminalStatus('in_progress'), false);
+  // 网关返回大写，未归一化时轮询永远不会结束。
+  assert.equal(isTerminalStatus('SUCCESS'), true);
+  assert.equal(isTerminalStatus('FAILED'), true);
+  assert.equal(isTerminalStatus('IN_PROGRESS'), false);
+  assert.equal(isSuccessStatus('SUCCESS'), true);
   assert.equal(isSuccessStatus('completed'), true);
   assert.equal(isSuccessStatus('failed'), false);
+});
+
+test('task id survives a reload so polling can resume', () => {
+  const store = new Map();
+  const original = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: key => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: key => store.delete(key),
+  };
+  try {
+    assert.equal(loadVideoTask(1), null);
+    saveVideoTask(1, { id: 'task-7', model: 'seedance-2.5', status: 'QUEUED' });
+    assert.deepEqual(loadVideoTask(1), { id: 'task-7', model: 'seedance-2.5', status: 'queued' });
+    // 不同用户互不可见
+    assert.equal(loadVideoTask(2), null);
+    clearVideoTask(1);
+    assert.equal(loadVideoTask(1), null);
+    // 脏数据不应抛错
+    store.set('fyt.video.task.3', '{not json');
+    assert.equal(loadVideoTask(3), null);
+  } finally {
+    globalThis.localStorage = original;
+  }
 });
 
 test('content url encodes the task id', () => {
@@ -69,7 +114,7 @@ test('polling reads status without issuing a second submission', async () => {
   acceptAuthBundle({ access_token: 'fixture', access_expires_at: Date.now() / 1000 + 3600, user: { id: 1 }, session: { sid: 'sid' } }, { broadcast: false });
   globalThis.fetch = async (url, init) => {
     seen.push([url, init?.method || 'GET']);
-    return Response.json({ id: 'task-9', status: 'in_progress' });
+    return Response.json({ code: 'success', message: '', data: { id: 'task-9', status: 'IN_PROGRESS' } });
   };
   try {
     const result = await fetchFytVideo('task-9');

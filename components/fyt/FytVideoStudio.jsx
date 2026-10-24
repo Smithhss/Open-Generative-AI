@@ -5,12 +5,15 @@ import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import {
   VIDEO_DURATIONS,
   VIDEO_SIZES,
+  clearVideoTask,
   createFytVideo,
   fetchFytVideo,
   fytVideoContentUrl,
   getVideoModels,
   isSuccessStatus,
   isTerminalStatus,
+  loadVideoTask,
+  saveVideoTask,
 } from '@/lib/fyt/videos.mjs';
 
 const POLL_INTERVAL_MS = 3000;
@@ -75,13 +78,14 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
     return () => controller.abort();
   }, [group, userId, active, copy]);
 
-  const poll = useCallback(async (taskId) => {
+  const poll = useCallback(async (taskId, modelName) => {
     let count = 0;
     const tick = async () => {
       count += 1;
       try {
         const result = await fetchFytVideo(taskId);
         setStatus(result.status);
+        saveVideoTask(userId, { id: taskId, model: modelName, status: result.status });
         if (isTerminalStatus(result.status)) {
           setRunning(false);
           stopPolling();
@@ -95,17 +99,34 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
       pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
     };
     await tick();
-  }, [copy, onSettled, stopPolling]);
+  }, [copy, onSettled, stopPolling, userId]);
+
+  // 刷新后按任务编号续查：已结束的任务直接展示结果，未结束的继续轮询。
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!userId || !active || restored.current) return;
+    restored.current = true;
+    const saved = loadVideoTask(userId);
+    if (!saved) return;
+    setTask({ id: saved.id, model: saved.model });
+    setStatus(saved.status);
+    if (!isTerminalStatus(saved.status)) {
+      setRunning(true);
+      poll(saved.id, saved.model);
+    }
+  }, [userId, active, poll]);
 
   async function generate() {
     if (running || !model || !group || !userId) return;
     setError(''); setTask(null); setStatus(''); setRunning(true);
+    clearVideoTask(userId);
     const controller = new AbortController(); abort.current = controller;
     try {
       const created = await createFytVideo({ model, group, prompt, seconds, size, imageUrl: imageUrl.trim() || undefined }, { signal: controller.signal });
       setTask(created);
       setStatus(created.status);
-      poll(created.id);
+      saveVideoTask(userId, { id: created.id, model: created.model || model, status: created.status });
+      poll(created.id, created.model || model);
     } catch (cause) {
       setRunning(false);
       setError(copy(cause?.message));
