@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import { getImageModels, generateFytImage } from '@/lib/fyt/images.mjs';
+import { modelOptions } from '@/lib/fyt/model-alias.mjs';
 import FytImageEditStudio from '@/components/fyt/FytImageEditStudio';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
@@ -66,7 +67,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     </select>
     <select aria-label={zh ? '图片模型' : 'Image model'} className={field} value={model} disabled={!userId || running || loading || !models.length} onChange={event => setModel(event.target.value)}>
       {!models.length && <option value="">{zh ? '无可用模型' : 'No model'}</option>}
-      {models.map(id => <option key={id} value={id}>{id}</option>)}
+      {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
     </select>
     <button type="button" className={field} disabled={running || !userId} onClick={() => setReload(value => value + 1)}>{zh ? '刷新模型' : 'Refresh'}</button>
     <span className="text-xs text-white/45">{error || (loading ? (zh ? '读取模型…' : 'Loading…') : userId && !models.length ? (zh ? '当前分组无可用图片模型' : 'No image model in this group') : '')}</span>

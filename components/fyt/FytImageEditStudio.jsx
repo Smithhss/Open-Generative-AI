@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { EDIT_ACCEPTED_TYPES, MAX_EDIT_BYTES, generateFytImageEdit, validateEditFile } from '@/lib/fyt/images.mjs';
+import { modelOptions } from '@/lib/fyt/model-alias.mjs';
 
 // 图生图单独做一层，不改上游 ImageStudio：上游在上传槽位上做了 `!fytImage` 判断，
 // 直接改会抬高后续同步上游的成本。
@@ -75,7 +76,7 @@ export default function FytImageEditStudio({ locale, userId, group, model, model
         <label className="text-xs text-white/50">{zh ? '图片模型' : 'Image model'}
           <select className={`${field} mt-1 w-full`} value={model} disabled>
             {!models.length && <option value="">{zh ? '当前分组无可用模型' : 'No model in this group'}</option>}
-            {models.map(id => <option key={id} value={id}>{id}</option>)}
+            {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
       </div>

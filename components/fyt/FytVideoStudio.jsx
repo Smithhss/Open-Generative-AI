@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
+import { modelOptions } from '@/lib/fyt/model-alias.mjs';
 import {
   VIDEO_DURATIONS,
   VIDEO_SIZES,
@@ -158,7 +159,7 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
         <label className="text-xs text-white/50">{zh ? '视频模型' : 'Video model'}
           <select className={`${field} mt-1 w-full`} value={model} disabled={!userId || running || !models.length} onChange={event => setModel(event.target.value)}>
             {!models.length && <option value="">{zh ? '当前分组无视频模型' : 'No video model in this group'}</option>}
-            {models.map(id => <option key={id} value={id}>{id}</option>)}
+            {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
         <label className="text-xs text-white/50">{zh ? '时长（秒）' : 'Duration (s)'}
