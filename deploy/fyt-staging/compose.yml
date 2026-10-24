@@ -2,11 +2,14 @@ name: fyt-creative-staging
 
 services:
   studio:
-    image: fyt-studio:staging-20261024-v12
+    image: fyt-studio:staging-20261024-v14
     build:
       context: ../..
       dockerfile: deploy/fyt-staging/Dockerfile
     restart: unless-stopped
+    environment:
+      # 画布 AI 从容器内部直接调 Go 网关，鉴权沿用浏览器带来的 cookie / Bearer。
+      - FYT_INTERNAL_API=http://api:3000
     networks:
       fyt:
         aliases: [fyt-studio]

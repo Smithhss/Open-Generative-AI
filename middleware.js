@@ -28,7 +28,9 @@ export function middleware(request) {
 
     // nextUrl.pathname is basePath-normalized. Block every original API handler,
     // including the double-/api and upload catchalls, before any rewrite runs.
-    if (process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' &&
+    // 画布的 AI 面板由本仓库自己实现（lib/fyt/creative-agent.mjs），其余 /api/* 仍然禁用。
+    const isFytCreativeAgent = url.pathname === '/api/v1/creative-agent' || url.pathname.startsWith('/api/v1/creative-agent/');
+    if (process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' && !isFytCreativeAgent &&
         (url.pathname === '/api' || url.pathname.startsWith('/api/'))) {
         return addSecurityHeaders(NextResponse.json({ success: false, message: 'MuAPI routes are disabled in fyt mode' }, { status: 404 }));
     }
