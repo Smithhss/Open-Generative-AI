@@ -328,7 +328,19 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 | 编号 | 任务 | 说明 |
 |---|---|---|
 | T0.3 | 图片尺寸/张数能力 | 阻塞：`with_meta=1` 只返回模型类别，没有尺寸/张数元数据，需先补后端字段 |
-| P3 | 模型别名映射 | 未开始 |
 | T4.2 | 产物签名 URL | 未开始；当前图片产物是上游外链，建议先做 fyt 侧代理 |
 | P5 | 技术债：Layers wrapper、Shell 收敛 | 未开始 |
 | C3 | 归档 `deploy/fyt-validation/` | 待确认预发是否仍依赖 |
+
+### 7.5 P3 完成：模型别名表
+
+原计划设想的是「上游模型 id → fyt 模型名」的单向映射，用来决定能不能生成。实际改造后生图/生视频都走 fyt 自己的模型目录，那条路径已经不成立，所以按真实需求重做成两件事：
+
+| 能力 | 函数 | 用途 |
+|---|---|---|
+| 展示名 | `labelForModel` / `modelOptions` | 下拉框显示 `GPT Image 2.5 Flare` 而不是 `gpt-image-2.5-flare`；未收录的模型原样显示，不猜 |
+| 上游解析 | `resolveFytModel` / `isModelMapped` | 上游 id（`gpt-image-1`、`nano-banana` 等）按候选顺序解析到当前分组真实可用的 fyt 模型；解析不到返回 `null`，调用方据此禁用生成而不是发一个必然失败的请求 |
+
+`modelOptions` 只改 `label`，`value` 始终是 fyt 真实模型名，不会因为显示名改动而调错模型。
+
+预发验证：`/create/zh/studio` 返回 200，产物块中包含「图生图」「FYT IMAGE EDIT」「GPT Image 2.5 Flare」「视频工作室」四处标记。
