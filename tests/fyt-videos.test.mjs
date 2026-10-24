@@ -93,12 +93,14 @@ test('video submit is never retried and surfaces auth loss', async () => {
   const parameters = { model: 'kling-v2', group: 'default', prompt: 'fox', seconds: 5 };
   try {
     let calls = 0;
+    // 只统计对 /pg/videos 的提交次数：提交前会先刷新令牌，那不是重发。
+    const countSubmit = url => { if (String(url).includes('/pg/videos')) calls += 1; };
     acceptAuthBundle(bundle(1), { broadcast: false });
-    globalThis.fetch = async () => { calls += 1; throw new TypeError('network'); };
+    globalThis.fetch = async url => { countSubmit(url); throw new TypeError('network'); };
     await assert.rejects(createFytVideo(parameters));
     assert.equal(calls, 1);
 
-    globalThis.fetch = async () => { calls += 1; return Response.json({ error: { message: 'expired' } }, { status: 401 }); };
+    globalThis.fetch = async url => { countSubmit(url); return Response.json({ error: { message: 'expired' } }, { status: 401 }); };
     await assert.rejects(createFytVideo(parameters), /AUTH_REQUIRED/);
     assert.equal(calls, 2);
   } finally {
