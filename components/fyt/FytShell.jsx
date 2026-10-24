@@ -88,6 +88,7 @@ export default function FytShell({ locale = 'en' }) {
   const identity = session.status === 'authenticated' ? session.user?.id : null;
   return <StandaloneShell key={identity || 'anonymous'} locale={locale} fyt={{
     userId: identity,
+    userEmail: session.user?.username || (identity ? `fyt-${identity}` : undefined),
     onGenerationSettled,
     controls: <FytAccountControls key={`${identity}:${session.session?.sid}`} session={session} locale={locale} authError={authError} checkSession={checkSession} balanceRevision={balanceRevision} />,
   }} />;

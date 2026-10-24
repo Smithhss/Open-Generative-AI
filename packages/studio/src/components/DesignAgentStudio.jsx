@@ -28,7 +28,8 @@ export default function DesignAgentStudio({
   }
 
   useEffect(() => {
-    if (!apiKey) return;
+    // fyt 模式没有 MuAPI key：只要外层给了用户身份，也要初始化，否则画布会停在未授权态。
+    if (!apiKey && userEmail === undefined && balance === undefined) return;
 
     // White-label shells already know the end user's identity/credit balance (fetched via
     // /api/whitelabel/balance) and pass them in directly — GET /account/balance explicitly
