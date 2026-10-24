@@ -16,6 +16,7 @@ export default function DesignAgentStudio({
   onGenerationComplete,
   onGenerationError,
   // fyt 本地画布：透传给 CreativeCanvas，素材不上传、项目文件本地保存。
+  authToken = null,
   localCanvas = false,
   onLocalFiles = null,
   isLocalSource = null,
@@ -30,9 +31,17 @@ export default function DesignAgentStudio({
   // localStorage before CreativeCanvas's own mount effects read it — passive effects run
   // child-before-parent within a commit, so setting this from *our* useEffect ran after
   // CreativeCanvas's first sessions/agent-skills fetch had already gone out unauthenticated.
-  if (typeof window !== 'undefined' && apiKey) {
-    sessionStorage.setItem("fromDesignAgent", "true");
-    localStorage.setItem("token", apiKey);
+  if (typeof window !== 'undefined') {
+    if (apiKey) {
+      sessionStorage.setItem("fromDesignAgent", "true");
+      localStorage.setItem("token", apiKey);
+    } else if (authToken) {
+      // fyt 模式：画布把 localStorage.token 当 Bearer 发出去，这里放入会话访问令牌。
+      // 只在本组件挂载期间存在，卸载时清掉。
+      localStorage.setItem("token", authToken);
+    } else {
+      localStorage.removeItem("token");
+    }
   }
 
   useEffect(() => {

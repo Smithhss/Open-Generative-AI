@@ -7,7 +7,7 @@ import { loadLocalImage, validateLocalImageFile } from '../../packages/studio/sr
 import { MAX_PROJECT_BYTES, buildCanvasProject, parseCanvasProject, prepareCanvasProject } from '../../packages/Open-AI-Design-Agent/packages/design-agent/src/localCanvasProject.js';
 
 // 原版画布 + fyt 本地素材：素材只留在浏览器里，项目文件本地保存，不经过任何远端存储。
-export default function FytCanvasStudio({ locale, active, userEmail, incomingImage, onImageHandled }) {
+export default function FytCanvasStudio({ locale, active, userEmail, authToken, incomingImage, onImageHandled }) {
   const zh = locale === 'zh';
   const [ready, setReady] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
@@ -203,7 +203,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, incomingIma
       {error ? <span role="alert" className="text-red-300">{error}</span> : <span role="status" className="text-cyan-300/80">{notice}</span>}
     </div>}
     <div className="flex-1 min-h-0">
-      <DesignAgentStudio locale={locale} userEmail={userEmail}
+      <DesignAgentStudio locale={locale} userEmail={userEmail} authToken={authToken}
         localCanvas onLocalFiles={importFiles} isLocalSource={isLocalSource} onLocalClear={releaseSources}
         onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar} />
     </div>
