@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VideoStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
-import { modelOptions } from '@/lib/fyt/model-alias.mjs';
+import FytModelPicker from '@/components/fyt/FytModelPicker';
 import {
   VIDEO_DURATIONS,
   VIDEO_SIZES,
@@ -141,10 +141,8 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
       {!groups.length && <option value="">{zh ? '无可用分组' : 'No group'}</option>}
       {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
     </select>
-    <select aria-label={zh ? '视频模型' : 'Video model'} className={pill} value={model} disabled={!userId || running || !models.length} onChange={event => setModel(event.target.value)}>
-      {!models.length && <option value="">{zh ? '当前分组无视频模型' : 'No video model'}</option>}
-      {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-    </select>
+    <FytModelPicker models={models} capabilities={{}} value={model} onChange={setModel}
+      disabled={!userId || running || !models.length} zh={zh} />
     <select aria-label={zh ? '时长' : 'Duration'} className={pill} value={seconds} disabled={running} onChange={event => setSeconds(Number(event.target.value))}>
       {VIDEO_DURATIONS.map(value => <option key={value} value={value}>{value}s</option>)}
     </select>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import { getImageModels, generateFytImage, generateFytImageEdit } from '@/lib/fyt/images.mjs';
-import { modelOptions } from '@/lib/fyt/model-alias.mjs';
+import FytModelPicker from '@/components/fyt/FytModelPicker';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
   const zh = locale === 'zh';
@@ -77,10 +77,8 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
       {!groups.length && <option value="">{zh ? '请先登录' : 'Sign in first'}</option>}
       {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
     </select>
-    <select aria-label={zh ? '图片模型' : 'Image model'} className={pill} value={model} disabled={!userId || running || loading || !models.length} onChange={event => setModel(event.target.value)}>
-      {!models.length && <option value="">{zh ? '无可用模型' : 'No model'}</option>}
-      {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-    </select>
+    <FytModelPicker models={models} capabilities={capabilities} value={model} onChange={setModel}
+      disabled={!userId || running || loading || !models.length} zh={zh} />
     {sizes.length > 0 && <select aria-label={zh ? '图片尺寸' : 'Image size'} className={pill} value={activeSize} disabled={!userId || running || loading}
       onChange={event => setSize(event.target.value)}>
       {sizes.map(value => <option key={value} value={value}>{value}</option>)}
