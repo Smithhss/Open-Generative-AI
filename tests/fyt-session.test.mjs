@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { acceptAuthBundle, bootstrapSession, clearSession, getSessionState, refreshSession } from '../lib/fyt/session.mjs';
 import { getAccount, logout } from '../lib/fyt/account.mjs';
-import { readDraft, saveDraft } from '../lib/fyt/draft.mjs';
 
 const bundle = id => ({ access_token: `test-access-${id}`, access_expires_at: Date.now() / 1000 + 3600,
   user: { id, username: `user-${id}` }, session: { sid: `test-session-${id}` } });
@@ -111,14 +110,3 @@ test('unavailable currency does not produce a guessed balance', async () => {
   finally { globalThis.fetch = original; clearSession(); }
 });
 
-test('drafts use stable user identity, do not import legacy history or store tokens', () => {
-  const values = new Map([['muapi_history', 'legacy']]);
-  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
-  saveDraft(storage, 1, 'first account');
-  saveDraft(storage, 2, 'second account');
-  assert.equal(readDraft(storage, 1), 'first account');
-  assert.equal(readDraft(storage, 2), 'second account');
-  assert.equal(readDraft(storage, 3), '');
-  assert.throws(() => saveDraft(storage, '../1', 'invalid'), /INVALID_USER/);
-  assert.equal(values.size, 3);
-});

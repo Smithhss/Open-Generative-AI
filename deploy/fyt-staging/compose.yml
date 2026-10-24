@@ -2,7 +2,7 @@ name: fyt-creative-staging
 
 services:
   studio:
-    image: fyt-studio:staging-editors-20261023-v1
+    image: fyt-studio:staging-20261024-v3
     build:
       context: ../..
       dockerfile: deploy/fyt-staging/Dockerfile
