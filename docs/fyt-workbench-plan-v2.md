@@ -421,3 +421,15 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 ### 踩到的坑（值得记住）
 
 原版 `handleGenerate` 第一行是 `if (previewMode) return;`，而 fyt 模式为了隔离持久化键必须传 `previewMode`。注入的 fyt 分支如果排在它后面，**永远不会执行，点生成毫无反应**。`ImageStudio` 原本就是先判 `fytImage` 再判 `previewMode`，视频这边照抄这个顺序才对。
+
+### 7.12 三处自建页面全部回归原版（2026-10-24 晚）
+
+| 页面 | 做法 | 代价 |
+|---|---|---|
+| 图生图 | 用回原版 `ImageStudio` 自己的上传按钮：`UploadButton` 增加 `localOnly`，fyt 模式下只生成 objectURL，File 留在本地表；生成时按有无 File 走 `/pg/images/edits` 或文生图 | 无（自建编辑页删除） |
+| 无限画布 | 直接用上游 `DesignAgentStudio`（CreativeCanvas），删掉自建外壳 | 失去本地项目文件（`.fytcanvas` 保存/打开）与「加入无限画布」按钮；画布内的 AI 功能依赖 MuAPI，fyt 下不可用 |
+| 文本助手 | 给原版 `AgentStudio` 加 `agentApi`（8 个接口适配器）与 `navigate`（接管跳转）两个注入点，数据用模板 + `/pg/chat/completions` | 失去本地会话历史（适配器返回空列表）；创建智能体不可用 |
+
+三个组件现在都是「原版界面 + fyt 数据注入」，自建文件从 5 个减到 3 个（`FytShell`、`FytImageStudio`、`FytVideoStudio`、`FytAgentStudio` 都是薄壳，合计约 400 行）。
+
+**验证方式说明**：所有页面返回 200、chunk 全量可加载、服务端日志无异常；但本机没有浏览器自动化工具，点击级交互（上传出图、发送对话、画布操作）需要人工在浏览器确认。
