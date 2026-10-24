@@ -3450,7 +3450,7 @@ export default function VideoStudio({
                 </>
               ) : (
                 <>
-                  <span>{previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.controls.generate}</span>
+                  <span>{fytVideo ? copy.controls.generate : previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.controls.generate}</span>
                 </>
               )}
             </PromptAction>
