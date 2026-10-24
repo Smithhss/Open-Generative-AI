@@ -162,7 +162,27 @@ function ChatBubble({ message }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 const TABS = ["templates", "my-agents", "my-chats"];
 
-export default function AgentStudio({ apiKey, locale = "en" }) {
+const DEFAULT_AGENT_API = {
+  getTemplateAgents,
+  getUserAgents,
+  getUserConversations,
+  getAgentBySlug,
+  getAgentConversation,
+  sendAgentChatMessage,
+  pollAgentChatResult,
+  createAgent,
+};
+
+export default function AgentStudio({ apiKey, locale = "en", agentApi = null, basePath = "/agents", navigate = null }) {
+  // fyt 模式没有 MuAPI 智能体后端：数据与对话全部由 agentApi 适配，路由前缀换成 /create/...。
+  const api = agentApi || DEFAULT_AGENT_API;
+  // 外层可以接管跳转：fyt 工作台挂在 /create 下的 catch-all 路由，改 URL 反而会丢状态。
+  const nav = navigate
+    ? { push: (path) => navigate(path), replace: (path) => navigate(path) }
+    : {
+        push: (path, options) => router.push(path.startsWith("/agents") ? `${basePath}${path}` : path, options),
+        replace: (path, options) => router.replace(path.startsWith("/agents") ? `${basePath}${path}` : path, options),
+      };
   const router = useRouter();
   const params = useParams();
   const copy = resolveCopy(en, zh, locale);
@@ -173,7 +193,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Deep-link routing. `router.push('/agents/...')` below is a real full navigation
+  // Deep-link routing. `nav.push('/agents/...')` below is a real full navigation
   // away from the studio shell on muapi.ai (BYOK/dashboard) — AiAgent's own standalone
   // pages handle it there, unaffected. On a white-label custom domain the same push is
   // transparently rewritten by middleware.js back to this same catch-all shell route, so
@@ -202,7 +222,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
   const handleSelectAgent = useCallback(
     (agent) => {
       const id = agent.agent_id || agent.id;
-      router.push(`/agents/${id}`);
+      nav.push(`/agents/${id}`);
     },
     [router]
   );
@@ -210,18 +230,18 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
   const handleEditAgent = useCallback(
     (agent) => {
       const id = agent.agent_id || agent.id;
-      router.push(`/agents/edit/${id}`);
+      nav.push(`/agents/edit/${id}`);
     },
     [router]
   );
 
   const handleCreateAgent = useCallback(() => {
-    router.push("/agents/create");
+    nav.push("/agents/create");
   }, [router]);
 
   const handleOpenConversation = useCallback(
     (agentSlug, convId) => {
-      router.push(`/agents/${agentSlug}/${convId}`);
+      nav.push(`/agents/${agentSlug}/${convId}`);
     },
     [router]
   );
@@ -230,7 +250,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
   // from the standalone dashboard today) — treat it as "back to list" rather than
   // trying to load an agent named "edit" and showing a confusing error.
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey && !agentApi) return;
     if (!urlAgentSlug || urlAgentSlug === "edit") {
       setView("list");
       return;
@@ -245,11 +265,11 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       setChatLoading(true);
       setChatError(null);
       try {
-        const agent = await getAgentBySlug(apiKey, urlAgentSlug);
+        const agent = await api.getAgentBySlug(apiKey, urlAgentSlug);
         if (cancelled) return;
         setActiveAgent(agent);
         if (urlConversationId) {
-          const conv = await getAgentConversation(apiKey, urlAgentSlug, urlConversationId);
+          const conv = await api.getAgentConversation(apiKey, urlAgentSlug, urlConversationId);
           if (cancelled) return;
           setConversationId(conv.id);
           setChatMessages(conv.history || []);
@@ -277,11 +297,11 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
     setChatError(null);
     try {
       const agentSlug = activeAgent.agent_id;
-      const { request_id } = await sendAgentChatMessage(apiKey, agentSlug, {
+      const { request_id } = await api.sendAgentChatMessage(apiKey, agentSlug, {
         message: text,
         conversationId,
       });
-      const result = await pollAgentChatResult(apiKey, request_id);
+      const result = await api.pollAgentChatResult(apiKey, request_id);
       // result.messages is only this turn's assistant/pulse entries, not the
       // full transcript (see AiAgent.jsx) — append, don't replace, or every
       // send wipes the user's own message and all prior history from view.
@@ -294,7 +314,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       ]);
       if (result.conversation_id && result.conversation_id !== conversationId) {
         setConversationId(result.conversation_id);
-        router.replace(`/agents/${agentSlug}/${result.conversation_id}`, { scroll: false });
+        nav.replace(`/agents/${agentSlug}/${result.conversation_id}`, { scroll: false });
       }
     } catch (err) {
       setChatError(err.message || copy.errors.sendFailed);
@@ -310,14 +330,14 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       setCreating(true);
       setCreateError(null);
       try {
-        const created = await createAgent(apiKey, {
+        const created = await api.createAgent(apiKey, {
           name: createForm.name.trim(),
           description: createForm.description.trim() || null,
           system_prompt: createForm.system_prompt.trim(),
           welcome_message: createForm.welcome_message.trim() || null,
           skill_ids: [],
         });
-        router.push(`/agents/${created.agent_id}`);
+        nav.push(`/agents/${created.agent_id}`);
       } catch (err) {
         setCreateError(err.message || copy.errors.createFailed);
       } finally {
@@ -328,7 +348,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
   );
 
   useEffect(() => {
-    if (!apiKey || view !== "list") return;
+    if ((!apiKey && !agentApi) || view !== "list") return;
     let cancelled = false;
 
     async function load() {
@@ -338,13 +358,13 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       setConversations([]);
       try {
         if (activeMainTab === "templates") {
-          const data = await getTemplateAgents(apiKey);
+          const data = await api.getTemplateAgents(apiKey);
           if (!cancelled) setAgents(data);
         } else if (activeMainTab === "my-agents") {
-          const data = await getUserAgents(apiKey);
+          const data = await api.getUserAgents(apiKey);
           if (!cancelled) setAgents(data);
         } else if (activeMainTab === "my-chats") {
-          const data = await getUserConversations(apiKey);
+          const data = await api.getUserConversations(apiKey);
           if (!cancelled) setConversations(data);
         }
       } catch (err) {
@@ -365,7 +385,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       <div className="h-full flex flex-col bg-[#030303] text-white overflow-y-auto custom-scrollbar">
         <div className="flex-shrink-0 h-16 border-b border-white/5 flex items-center gap-6 px-8 bg-black/40">
           <button
-            onClick={() => router.push("/agents")}
+            onClick={() => nav.push("/agents")}
             className="flex items-center gap-2 text-xs font-bold text-white/50 hover:text-white transition-colors"
             type="button"
           >
@@ -452,7 +472,7 @@ export default function AgentStudio({ apiKey, locale = "en" }) {
       <div className="h-full flex flex-col bg-[#030303] text-white">
         <div className="flex-shrink-0 h-16 border-b border-white/5 flex items-center gap-4 px-8 bg-black/40">
           <button
-            onClick={() => router.push("/agents")}
+            onClick={() => nav.push("/agents")}
             className="flex items-center gap-2 text-xs font-bold text-white/50 hover:text-white transition-colors"
             type="button"
           >
