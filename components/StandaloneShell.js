@@ -13,6 +13,7 @@ import axios from 'axios';
 import FytAgentStudio from '@/components/fyt/FytAgentStudio';
 import FytImageStudio from '@/components/fyt/FytImageStudio';
 import FytCanvasStudio from '@/components/fyt/FytCanvasStudio';
+import FytWorksStudio from '@/components/fyt/FytWorksStudio';
 import FytVideoStudio from '@/components/fyt/FytVideoStudio';
 import { generatedImageFile } from '@/lib/fyt/image-transfer.mjs';
 import { getSessionRevision, getSessionState } from '@/lib/fyt/session.mjs';
@@ -25,6 +26,18 @@ import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locale
 // inside the component below, with these English strings as the fallback
 // when a locale bundle is missing the key.
 const TABS = [
+  {
+    id: 'works',
+    label: 'Works',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    )
+  },
   {
     id: 'image',
     label: 'Image Studio',
@@ -215,6 +228,19 @@ const TABS = [
 
 const NAVIGATION_CATEGORIES = [
   {
+    id: 'library',
+    label: 'Library',
+    tabIds: ['works'],
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    )
+  },
+  {
     id: 'images',
     label: 'Images',
     tabIds: ['image', 'layers', 'cinema', 'design-agent', 'ai-influencer'],
@@ -269,7 +295,7 @@ const NAVIGATION_CATEGORIES = [
 const EXPLORE_APPS_TAB = TABS.find((tab) => tab.id === 'apps');
 
 // fyt 模式下只展示已接入的入口；其余工具的代码与路由保留，但不占导航。
-const FYT_VISIBLE_TABS = new Set(['image', 'video', 'layers', 'design-agent', 'agents']);
+const FYT_VISIBLE_TABS = new Set(['works', 'image', 'video', 'layers', 'design-agent', 'agents']);
 
 const getNavigationCategory = (tabId) => (
   NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
@@ -331,7 +357,9 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
 
   const copy = getCommonCopy(locale);
   const tabLabel = useCallback(
-    (tabId) => fytMode && tabId === 'design-agent' ? (locale === 'zh' ? '无限画布' : 'Infinite canvas') : copy.tabs?.[tabId] || TABS.find((t) => t.id === tabId)?.label || tabId,
+    (tabId) => fytMode && tabId === 'design-agent' ? (locale === 'zh' ? '无限画布' : 'Infinite canvas')
+      : fytMode && tabId === 'works' ? (locale === 'zh' ? '作品' : 'Works')
+      : copy.tabs?.[tabId] || TABS.find((t) => t.id === tabId)?.label || tabId,
     [copy, fytMode, locale],
   );
   const categoryLabel = useCallback(
@@ -1048,13 +1076,14 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
         {/* Studio Content */}
         <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
         {fytMode ? <>
+          <div className={activeTab === 'works' ? 'h-full w-full' : 'hidden'}><FytWorksStudio locale={locale} userId={fyt.userId} active={activeTab === 'works'} /></div>
           <div className={activeTab === 'image' ? 'h-full w-full' : 'hidden'}><FytImageStudio locale={locale} userId={fyt.userId} active={activeTab === 'image'} onSettled={fyt.onGenerationSettled} onOpenImage={handleGeneratedImageOpen} transferring={transferPending} /></div>
           <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><FytVideoStudio locale={locale} userId={fyt.userId} active={activeTab === 'video'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'layers' ? 'h-full w-full' : 'hidden'}><LayersStudio locale={locale} localOnly preserveOriginalPanel active={activeTab === 'layers'} incomingImage={imageTransfer?.target === 'layers' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           <div className={activeTab === 'agents' ? 'h-full w-full' : 'hidden'}><FytAgentStudio locale={locale} userId={fyt.userId} enabled={activeTab === 'agents'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio locale={locale} userEmail={fyt.userEmail} authToken={fyt.accessToken} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           {activeTab === 'apps' && <AppsStudio locale={locale} />}
-          {!['image', 'video', 'agents', 'layers', 'apps', 'design-agent'].includes(activeTab) && <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
+          {!['works', 'image', 'video', 'agents', 'layers', 'apps', 'design-agent'].includes(activeTab) && <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
               <h1 className="text-3xl font-black text-white">{tabLabel(activeTab)}</h1>
               <p className="text-white/40 text-sm">{locale === 'zh' ? (activeTab === 'workflows' ? '工作流编辑与执行尚未接入，可先使用智能体中的文本助手。' : '此工具尚未接入 fyt。可使用文本助手，或预览图片和视频工作室。') : 'This tool is not connected to fyt yet. Use text assistants, or preview the image and video studios.'}</p>
             </div>}
