@@ -111,7 +111,12 @@ export default function FytImageEditStudio({ locale, userId, group, model, model
       {result && <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
         <p className="text-[11px] text-white/40 mb-2">{zh ? '结果' : 'Result'}</p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={result.url} alt={zh ? '图生图结果' : 'Edited image'} className="max-h-[420px] rounded-lg" />
+        <img src={result.url} alt={zh ? '图生图结果' : 'Edited image'} className="max-h-[420px] rounded-lg"
+          onError={event => {
+            // 网关没开产物代理时退回直连地址，避免整张图消失。
+            const direct = result.externalUrl;
+            if (direct && event.currentTarget.src !== direct) event.currentTarget.src = direct;
+          }} />
         <a className="inline-block mt-3 text-xs text-cyan-300 underline" href={result.url} download target="_blank" rel="noreferrer">
           {zh ? '下载图片' : 'Download image'}
         </a>
