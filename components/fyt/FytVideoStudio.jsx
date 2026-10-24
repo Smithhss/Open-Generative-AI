@@ -29,6 +29,7 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
   const [groups, setGroups] = useState([]);
   const [group, setGroup] = useState('');
   const [models, setModels] = useState([]);
+  const [capabilities, setCapabilities] = useState({});
   const [model, setModel] = useState('');
   const [seconds, setSeconds] = useState(VIDEO_DURATIONS[0]);
   const [size, setSize] = useState(VIDEO_SIZES[0]);
@@ -66,9 +67,10 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
     if (!group || !userId || !active) return undefined;
     const controller = new AbortController();
     getVideoModels({ group, signal: controller.signal })
-      .then(values => {
+      .then(({ models: values, capabilities: caps }) => {
         if (controller.signal.aborted) return;
         setModels(values);
+        setCapabilities(caps);
         setModel(values[0] || '');
       })
       .catch(cause => { if (!controller.signal.aborted) setError(copy(cause?.message)); });
@@ -131,6 +133,9 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
   }
 
   const pill = 'rounded-full border border-white/10 bg-[#151515] px-3 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40 disabled:hover:border-white/10';
+  // 时长与分辨率由服务端 capabilities 下发；模型没声明时退回内置常量。
+  const durations = capabilities[model]?.durations?.length ? capabilities[model].durations : VIDEO_DURATIONS;
+  const sizes = capabilities[model]?.sizes?.length ? capabilities[model].sizes : VIDEO_SIZES;
   const statusLabel = status === 'queued' ? (zh ? '排队中' : 'Queued')
     : status === 'in_progress' ? (zh ? '生成中' : 'Running')
     : status === 'completed' ? (zh ? '已完成' : 'Done')
@@ -144,10 +149,10 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
     <FytModelPicker models={models} capabilities={{}} value={model} onChange={setModel}
       disabled={!userId || running || !models.length} zh={zh} />
     <select aria-label={zh ? '时长' : 'Duration'} className={pill} value={seconds} disabled={running} onChange={event => setSeconds(Number(event.target.value))}>
-      {VIDEO_DURATIONS.map(value => <option key={value} value={value}>{value}s</option>)}
+      {durations.map(value => <option key={value} value={value}>{value}s</option>)}
     </select>
     <select aria-label={zh ? '分辨率' : 'Resolution'} className={pill} value={size} disabled={running} onChange={event => setSize(event.target.value)}>
-      {VIDEO_SIZES.map(value => <option key={value} value={value}>{value}</option>)}
+      {sizes.map(value => <option key={value} value={value}>{value}</option>)}
     </select>
     {statusLabel && <span className="text-[11px] text-white/35">{statusLabel}</span>}
     {resumed && isSuccessStatus(status) && <a className={`${pill} text-cyan-300`} href={fytVideoContentUrl(resumed.id)} download>{zh ? '下载上次结果' : 'Download last'}</a>}

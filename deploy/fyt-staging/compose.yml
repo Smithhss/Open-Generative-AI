@@ -2,7 +2,7 @@ name: fyt-creative-staging
 
 services:
   studio:
-    image: fyt-studio:staging-20261024-v20
+    image: fyt-studio:staging-20261024-v21
     build:
       context: ../..
       dockerfile: deploy/fyt-staging/Dockerfile
@@ -10,6 +10,9 @@ services:
     environment:
       # 画布 AI 从容器内部直接调 Go 网关，鉴权沿用浏览器带来的 cookie / Bearer。
       - FYT_INTERNAL_API=http://api:3000
+    volumes:
+      # 画布 AI 的会话与资产落在这里，容器重建不丢
+      - studioData:/app/data
     networks:
       fyt:
         aliases: [fyt-studio]
@@ -18,6 +21,9 @@ services:
       interval: 15s
       timeout: 10s
       retries: 4
+
+volumes:
+  studioData:
 
 networks:
   fyt:

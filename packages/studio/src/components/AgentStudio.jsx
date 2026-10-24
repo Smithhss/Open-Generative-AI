@@ -177,8 +177,15 @@ export default function AgentStudio({ apiKey, locale = "en", agentApi = null, ba
   // fyt 模式没有 MuAPI 智能体后端：数据与对话全部由 agentApi 适配，路由前缀换成 /create/...。
   const api = agentApi || DEFAULT_AGENT_API;
   // 外层可以接管跳转：fyt 工作台挂在 /create 下的 catch-all 路由，改 URL 反而会丢状态。
+  // 外层接管跳转时，用本地状态模拟路由：历史会话卡片点开才有反应。
+  const [routeOverride, setRouteOverride] = useState(null);
+  const applyPath = (path) => {
+    const match = /^\/agents(?:\/([^/]+))?(?:\/([^/]+))?/.exec(path || '');
+    setRouteOverride(match ? { slug: match[1] || null, conv: match[2] || null } : null);
+    setView('list');
+  };
   const nav = navigate
-    ? { push: (path) => navigate(path), replace: (path) => navigate(path) }
+    ? { push: (path) => { applyPath(path); navigate(path); }, replace: (path) => { applyPath(path); navigate(path); } }
     : {
         push: (path, options) => router.push(path.startsWith("/agents") ? `${basePath}${path}` : path, options),
         replace: (path, options) => router.replace(path.startsWith("/agents") ? `${basePath}${path}` : path, options),
@@ -201,8 +208,8 @@ export default function AgentStudio({ apiKey, locale = "en", agentApi = null, ba
   // anywhere — see docs/whitelabel_plan.md for the full routing writeup.
   const tabSegments = Array.isArray(params?.tab) ? params.tab : [];
   const agentsIdx = tabSegments.indexOf("agents");
-  const urlAgentSlug = agentsIdx === -1 ? null : tabSegments[agentsIdx + 1] || null;
-  const urlConversationId = agentsIdx === -1 ? null : tabSegments[agentsIdx + 2] || null;
+  const urlAgentSlug = routeOverride ? routeOverride.slug : (agentsIdx === -1 ? null : tabSegments[agentsIdx + 1] || null);
+  const urlConversationId = routeOverride ? routeOverride.conv : (agentsIdx === -1 ? null : tabSegments[agentsIdx + 2] || null);
 
   const [view, setView] = useState("list"); // 'list' | 'chat' | 'create'
   const [activeAgent, setActiveAgent] = useState(null);
