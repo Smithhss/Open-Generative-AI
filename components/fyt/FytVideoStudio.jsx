@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VideoStudio } from 'studio';
-import { getChatGroups } from '@/lib/fyt/chat.mjs';
+import { authenticatedScope, getChatGroups } from '@/lib/fyt/chat.mjs';
 import FytModelPicker from '@/components/fyt/FytModelPicker';
 import {
   VIDEO_DURATIONS,
@@ -104,6 +104,23 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
     })();
   }, [userId, active, onSettled]);
 
+  // 播放地址需要鉴权，<video src> 带不了请求头，所以取回字节换成本地 blob。
+  async function localizeVideo(id) {
+    const path = fytVideoContentUrl(id);
+    try {
+      const scope = await authenticatedScope();
+      try {
+        const response = await fetch(path, { ...scope.init });
+        if (!response.ok) return path;
+        const blob = await response.blob();
+        if (!blob.size) return path;
+        return URL.createObjectURL(blob);
+      } finally { scope.close(); }
+    } catch {
+      return path;
+    }
+  }
+
   // 提交并等待终态：原版画廊需要最终地址才能渲染。
   async function generate({ prompt }) {
     if (running || !model || !group || !userId || !prompt) throw new Error('INVALID_VIDEO_REQUEST');
@@ -121,7 +138,7 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
         setStatus(result.status);
         saveVideoTask(userId, { id: created.id, model: created.model || model, status: result.status });
         if (isSuccessStatus(result.status)) {
-          return { id: created.id, url: fytVideoContentUrl(created.id), model: created.model || model };
+          return { id: created.id, url: await localizeVideo(created.id), model: created.model || model };
         }
         if (isTerminalStatus(result.status)) throw new Error('VIDEO_TASK_FAILED');
       }
