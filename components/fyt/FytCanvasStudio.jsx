@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { DesignAgentStudio } from 'studio';
 import { authenticatedScope } from '@/lib/fyt/chat.mjs';
-import { getSessionState, subscribeSession } from '@/lib/fyt/session.mjs';
+import { getAccessToken, subscribeSession } from '@/lib/fyt/session.mjs';
 import { loadLocalImage, validateLocalImageFile } from '../../packages/studio/src/localImage.js';
 import { MAX_PROJECT_BYTES, buildCanvasProject, parseCanvasProject, prepareCanvasProject } from '../../packages/Open-AI-Design-Agent/packages/design-agent/src/localCanvasProject.js';
 
@@ -29,19 +29,26 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
   const importing = useRef(false);
   const currentImport = useRef(null);
 
-  // 画布把 localStorage.token 当 Bearer 发出去；令牌会刷新，必须跟着会话走，
-  // 否则渲染时写一次，过期后就一直是无效令牌。
+  // 画布只认 localStorage.token。这里用真令牌换一张票据放进去：
+  // 票据自带过期时间，画布不必关心令牌刷新，服务端解密后照常用真令牌调用网关。
   useEffect(() => {
-    const sync = () => {
-      const state = getSessionState();
+    let disposed = false;
+    const endpoint = `${process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' ? '/create' : ''}/api/v1/creative-agent/ticket`;
+
+    const refreshTicket = async () => {
       try {
-        if (state.status === 'authenticated' && state.accessToken) localStorage.setItem('token', state.accessToken);
-        else localStorage.removeItem('token');
-      } catch { /* 隐私模式忽略 */ }
+        const token = await getAccessToken();
+        if (!token || disposed) return;
+        const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+        const body = await response.json().catch(() => null);
+        if (!disposed && body?.ticket) localStorage.setItem('token', body.ticket);
+      } catch { /* 下次再试 */ }
     };
-    sync();
-    const unsubscribe = subscribeSession(sync);
-    return () => { unsubscribe?.(); };
+
+    void refreshTicket();
+    const unsubscribe = subscribeSession(() => { void refreshTicket(); });
+    const timer = setInterval(() => { void refreshTicket(); }, 30 * 60 * 1000);
+    return () => { disposed = true; unsubscribe?.(); clearInterval(timer); };
   }, []);
 
   const onProjectDirtyChange = useCallback(value => { dirtyRef.current = value; setDirty(value); }, []);
