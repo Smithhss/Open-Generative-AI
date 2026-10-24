@@ -89,7 +89,8 @@ export default function FytShell({ locale = 'en' }) {
   return <StandaloneShell key={identity || 'anonymous'} locale={locale} fyt={{
     userId: identity,
     userEmail: session.user?.username || (identity ? `fyt-${identity}` : undefined),
-    accessToken: session.session?.access_token || null,
+    // 令牌在 state.accessToken（camelCase），不是 session.session.access_token
+    accessToken: session.accessToken || null,
     onGenerationSettled,
     controls: <FytAccountControls key={`${identity}:${session.session?.sid}`} session={session} locale={locale} authError={authError} checkSession={checkSession} balanceRevision={balanceRevision} />,
   }} />;
