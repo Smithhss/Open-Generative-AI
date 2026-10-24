@@ -24,6 +24,7 @@ export default function DesignAgentStudio({
   onProjectDirtyChange = null,
   canvasApiRef = null,
   toolbarExtra = null,
+  resolveAsset = null,
 }) {
   const [userData, setUserData] = useState(null);
 
@@ -96,6 +97,7 @@ export default function DesignAgentStudio({
         onProjectDirtyChange={onProjectDirtyChange}
         canvasApiRef={canvasApiRef}
         toolbarExtra={toolbarExtra}
+        resolveAsset={resolveAsset}
       />
     </div>
   );

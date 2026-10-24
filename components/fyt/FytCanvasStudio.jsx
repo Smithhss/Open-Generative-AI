@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { DesignAgentStudio } from 'studio';
+import { authenticatedScope } from '@/lib/fyt/chat.mjs';
 import { loadLocalImage, validateLocalImageFile } from '../../packages/studio/src/localImage.js';
 import { MAX_PROJECT_BYTES, buildCanvasProject, parseCanvasProject, prepareCanvasProject } from '../../packages/Open-AI-Design-Agent/packages/design-agent/src/localCanvasProject.js';
 
@@ -56,6 +57,27 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       window.removeEventListener('fyt:before-sign-out', beforeSignOut);
     };
   }, [zh]);
+
+  // 画布只接受 blob 源；AI 产物是远端地址，先取回字节注册成本地素材。
+  const resolveAgentAsset = useCallback(async url => {
+    try {
+      const scope = await authenticatedScope();
+      let blob;
+      try {
+        const response = await fetch(url, { ...scope.init });
+        if (!response.ok) return null;
+        blob = await response.blob();
+      } finally { scope.close(); }
+      const file = new File([blob], `agent-${Date.now()}.png`, { type: blob.type || 'image/png' });
+      validateLocalImageFile(file);
+      const loaded = await loadLocalImage(file);
+      sources.current.set(loaded.url, { ...loaded, file });
+      if (alive.current) setSourceCount(sources.current.size);
+      return loaded.url;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const isLocalSource = useCallback(url => sources.current.has(url), []);
   const releaseSources = useCallback(() => {
@@ -205,7 +227,8 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
     <div className="flex-1 min-h-0">
       <DesignAgentStudio locale={locale} userEmail={userEmail} authToken={authToken}
         localCanvas onLocalFiles={importFiles} isLocalSource={isLocalSource} onLocalClear={releaseSources}
-        onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar} />
+        onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar}
+        resolveAsset={resolveAgentAsset} />
     </div>
     {sourceCount > 0 && <span className="sr-only">{zh ? `${sourceCount}张来源图片` : `${sourceCount} source images`}</span>}
   </div>;
