@@ -139,3 +139,53 @@ Toonflow 是 Vue3 + Bun 的短剧创作平台，**支持自定义 OpenAI 兼容�
 ## 6. 与现有计划的关系
 
 本文替代 `fyt-workbench-plan-v2.md` 第 7.12 节里「画布 AI 依赖 MuAPI、fyt 下不可用」的遗留项，其余条目不变。
+
+---
+
+## 7. Toonflow 可行性验证（2026-10-24）
+
+查了 `Smithhss/Toonflow-app`：**该 fork 与上游 `HBAI-Ltd/Toonflow-app` 完全一致，没有任何自有提交**（`upstream/master..HEAD` 为空）。所以结论按上游代码给。
+
+### 7.1 结论：可行，而且比预想的干净
+
+供应商不是靠配置面板填 JSON，而是 **`packages/providers/src/{language,media}/` 下的 TS 适配文件**，注册方式是 `packages/providers/index.ts` 里的一个数组：
+
+```ts
+export const languageProviders = [tfRouterLanguage, deepSeek] as const;
+export const mediaProviders = [tfRouterMedia, apiMart, metaso, compshare] as const;
+```
+
+适配文件声明 `rules`（渲染成表单：API Key、请求地址）、`models`（模型清单与能力）和若干方法。**加一个 fyt 供应商 = 2 个文件 + 2 行注册。**
+
+### 7.2 fyt 能覆盖到什么程度
+
+| Toonflow 需要 | fyt 现状 | 结论 |
+|---|---|---|
+| 语言模型 | `protocol: "openai-completions"` 是内置支持的，fyt 的 `/v1/chat/completions` 直接可用 | ✅ 几乎零成本 |
+| 图片生成 `text` | `/v1/images/generations` | ✅ |
+| 图片生成 `singleImage` | `/v1/images/edits`（multipart） | ✅ |
+| 图片 `multiReference` | 只支持单张参考图 | ❌ 暂不支持 |
+| 视频 `text` / `singleImage` | `/v1/videos` + 轮询 + `/content` | ✅ |
+| 视频 `startEndRequired` / `endFrameOptional` / `videoReference:N` | 只支持单张 `input_reference` | ❌ 首尾帧、多参考都缺 |
+| 估价 `getPrice` | 网关有 `ModelPrice`，可以读出来返回文本 | ✅ 可选 |
+| 余额 `getBalance` | `/api/user/self` 的 quota | ✅ 可选 |
+| 模型清单 `modelsUrl` | `/v1/models` 返回 `{data:[...]}`，正好匹配它约定的格式 | ✅ |
+
+### 7.3 工作量
+
+| 任务 | 内容 | 工期 |
+|---|---|---|
+| `media/fyt.ts` | 声明 rules + models；实现 `generateImage`（含 edits）、`generateVideo`（提交 + 轮询 + 取产物）、可选 `getPrice`/`getBalance` | 1 天 |
+| `language/fyt.ts` | 用 `protocol: "openai-completions"`，填 `apiUrl` 与模型清单 | 0.5 天 |
+| 注册 + 部署 | index.ts 两行 + Docker 部署 + 鉴权反代 | 0.5 天 |
+
+**合计 2 天**，比原估的 0.5–1 天多，因为要写适配器而不是纯配置。
+
+### 7.4 两个必须先解决的问题
+
+1. **多参考素材**：Toonflow 的短剧流程强依赖首尾帧与多图参考，fyt 现在只支持单张 `input_reference`。要么扩 fyt 的 `/v1/videos`，要么在适配器里降级（把多图拼成一张参考图，效果打折）。
+2. **鉴权**：Toonflow 无登录，必须挂在带认证的反代后；且它内部所有用户共用一个 fyt 令牌，计费会混在一起。
+
+### 7.5 建议
+
+先做 fyt 供应商适配器（2 天），**只暴露 text / singleImage 两类模式**，跑通「剧本→出图→出短视频」的最小链路。等链路验证有价值，再决定要不要为 Toonflow 扩 fyt 的多参考视频能力。
