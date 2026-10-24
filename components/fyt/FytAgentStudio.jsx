@@ -44,42 +44,78 @@ export default function FytAgentStudio({ locale, userId, enabled }) {
     system_prompt: item.system[zh ? 'zh' : 'en'],
   })), [zh]);
 
-  const agentApi = useMemo(() => ({
-    async getTemplateAgents() { return templates; },
-    // fyt 侧没有「用户创建的智能体」，先与模板同源，避免空列表。
-    async getUserAgents() { return templates; },
-    async getUserConversations() { return []; },
-    async getAgentBySlug(_key, slug) {
-      const found = templates.find(item => item.agent_id === slug);
-      if (!found) throw new Error('AGENT_NOT_FOUND');
-      return found;
-    },
-    async getAgentConversation(_key, _slug, conversationId) {
-      return { id: conversationId, history: [] };
-    },
-    async sendAgentChatMessage(_key, slug, { message }) {
-      if (!model || !group) throw new Error('MODEL_UNAVAILABLE');
-      const agent = templates.find(item => item.agent_id === slug);
-      let content = '';
-      await streamChat({
-        model,
-        group,
-        system: agent?.system_prompt || '',
-        messages: [{ role: 'user', content: message }],
-        onDelta(delta) { content += delta; },
-      });
-      const requestId = `fyt-${Date.now()}`;
-      replies.current.set(requestId, content);
-      return { request_id: requestId };
-    },
-    // 对话已经在上一步拿到完整结果，这里直接返回，不再等待。
-    async pollAgentChatResult(_key, requestId) {
-      return { messages: [{ role: 'assistant', content: replies.current.get(requestId) || '' }] };
-    },
-    async createAgent() {
-      throw new Error(zh ? 'fyt 暂不支持创建智能体' : 'Creating agents is not available in fyt');
-    },
-  }), [templates, model, group, zh]);
+  const agentApi = useMemo(() => {
+    const storageKey = `fyt.agent.conversations.${userId || 'anon'}`;
+    const read = () => {
+      try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { return []; }
+    };
+    const write = list => {
+      try { localStorage.setItem(storageKey, JSON.stringify(list.slice(0, 50))); } catch { /* 隐私模式忽略 */ }
+    };
+    const upsert = conv => {
+      const list = read();
+      const index = list.findIndex(item => item.id === conv.id);
+      if (index >= 0) list[index] = conv; else list.unshift(conv);
+      write(list);
+    };
+
+    return {
+      async getTemplateAgents() { return templates; },
+      // fyt 侧没有「用户创建的智能体」，先与模板同源，避免空列表。
+      async getUserAgents() { return templates; },
+      async getUserConversations() {
+        return read().map(item => ({ id: item.id, agent_slug: item.agent_slug, title: item.title, updated_at: item.updated_at }));
+      },
+      async getAgentBySlug(_key, slug) {
+        const found = templates.find(item => item.agent_id === slug);
+        if (!found) throw new Error('AGENT_NOT_FOUND');
+        return found;
+      },
+      async getAgentConversation(_key, _slug, conversationId) {
+        const conv = read().find(item => item.id === conversationId);
+        return { id: conversationId, history: conv?.messages || [] };
+      },
+      async sendAgentChatMessage(_key, slug, { message, conversationId }) {
+        if (!model || !group) throw new Error('MODEL_UNAVAILABLE');
+        const agent = templates.find(item => item.agent_id === slug);
+        const list = read();
+        const existing = conversationId ? list.find(item => item.id === conversationId) : null;
+        const history = existing?.messages || [];
+        // 带上前几轮，模型才接得住「再改一下」这类追问。
+        const context = [...history.slice(-10), { role: 'user', content: message }];
+        let content = '';
+        await streamChat({
+          model,
+          group,
+          system: agent?.system_prompt || '',
+          messages: context,
+          onDelta(delta) { content += delta; },
+        });
+        const conv = {
+          id: existing?.id || `conv_${Date.now().toString(36)}`,
+          agent_slug: slug,
+          title: existing?.title || message.slice(0, 24),
+          updated_at: Date.now(),
+          messages: [...context, { role: 'assistant', content }],
+        };
+        upsert(conv);
+        const requestId = `fyt-${Date.now()}`;
+        replies.current.set(requestId, { content, conversationId: conv.id });
+        return { request_id: requestId };
+      },
+      // 对话已经在上一步拿到完整结果，这里直接返回，不再等待。
+      async pollAgentChatResult(_key, requestId) {
+        const stored = replies.current.get(requestId) || { content: '', conversationId: null };
+        return {
+          messages: [{ role: 'assistant', content: stored.content }],
+          conversation_id: stored.conversationId,
+        };
+      },
+      async createAgent() {
+        throw new Error(zh ? 'fyt 暂不支持创建智能体' : 'Creating agents is not available in fyt');
+      },
+    };
+  }, [templates, model, group, zh, userId]);
 
   if (!userId) return <div className="h-full flex items-center justify-center text-sm text-amber-300">{zh ? '请先登录 fyt。' : 'Sign in with fyt first.'}</div>;
 
