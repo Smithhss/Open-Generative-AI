@@ -99,6 +99,14 @@ fyt 模式的 middleware 会拒绝整个 `/create/api/*`（避免旧页面拿 Mu
 **实测**：第一轮生成得到 `asset_xxx`；第二轮带 `canvas_state.selected=asset_xxx` 发「把杯子换成玻璃杯」，
 事件流为 `text → text → tool_call(edit_image) → tool_result(edit_image, source_asset_id=asset_xxx)`。
 
+### P2.1 三处收尾（已完成，2026-10-24）
+
+| 项 | 实现 | 验证 |
+|---|---|---|
+| 画布会话落盘 | 会话/资产/任务写 `/app/data/creative-agent.json`，compose 加 `studioData` 卷，镜像里把目录 chown 给 node | 建会话后文件出现；`docker restart` 后会话仍在 |
+| 历史会话可点开 | `AgentStudio` 在外层接管跳转时用本地路由状态，`nav.push` 解析出 slug/conv 并触发加载 | 代码路径打通（点击级待人工确认） |
+| 视频参数接能力表 | `ModelCapabilities` 加 `durations`；`getVideoModels` 返回 `{models, capabilities}`；视频页按模型渲染时长/分辨率 | `/api/user/models?type=video` 返回 `durations=[4,5,6,8,10]` |
+
 ### P3 视需要（不排期）
 
 - 多张图 / 局部重绘
