@@ -25,6 +25,7 @@ export default function DesignAgentStudio({
   canvasApiRef = null,
   toolbarExtra = null,
   resolveAsset = null,
+  fytTicket = null,
 }) {
   const [userData, setUserData] = useState(null);
 
@@ -97,6 +98,7 @@ export default function DesignAgentStudio({
         canvasApiRef={canvasApiRef}
         toolbarExtra={toolbarExtra}
         resolveAsset={resolveAsset}
+        fytTicket={fytTicket}
       />
     </div>
   );

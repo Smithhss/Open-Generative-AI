@@ -29,8 +29,9 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
   const importing = useRef(false);
   const currentImport = useRef(null);
 
-  // 画布只认 localStorage.token。这里用真令牌换一张票据放进去：
-  // 票据自带过期时间，画布不必关心令牌刷新，服务端解密后照常用真令牌调用网关。
+  // 用真令牌换一张票据，直接作为 prop 注入画布请求头。
+  // 不走 localStorage：那边会被别的组件覆盖，也拿不到刷新后的令牌。
+  const [ticket, setTicket] = useState(null);
   useEffect(() => {
     let disposed = false;
     const endpoint = `${process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' ? '/create' : ''}/api/v1/creative-agent/ticket`;
@@ -41,7 +42,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
         if (!token || disposed) return;
         const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
         const body = await response.json().catch(() => null);
-        if (!disposed && body?.ticket) localStorage.setItem('token', body.ticket);
+        if (!disposed && body?.ticket) setTicket(body.ticket);
       } catch { /* 下次再试 */ }
     };
 
@@ -251,7 +252,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       <DesignAgentStudio locale={locale} userEmail={userEmail} authToken={authToken}
         localCanvas onLocalFiles={importFiles} isLocalSource={isLocalSource} onLocalClear={releaseSources}
         onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar}
-        resolveAsset={resolveAgentAsset} />
+        resolveAsset={resolveAgentAsset} fytTicket={ticket} />
     </div>
     {sourceCount > 0 && <span className="sr-only">{zh ? `${sourceCount}张来源图片` : `${sourceCount} source images`}</span>}
   </div>;
