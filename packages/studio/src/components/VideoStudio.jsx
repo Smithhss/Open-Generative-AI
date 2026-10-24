@@ -2091,7 +2091,6 @@ export default function VideoStudio({
 
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
-    if (previewMode) return;
     if (fytVideo) {
       if (!fytVideo.enabled || generating) return;
       setGenerating(true);
@@ -2115,6 +2114,7 @@ export default function VideoStudio({
       }
       return;
     }
+    if (previewMode) return;
     if (mediaUploading || workflowUploadSlotRef.current) {
       toast.error(copy.errors.waitForCurrentUpload);
       return;
