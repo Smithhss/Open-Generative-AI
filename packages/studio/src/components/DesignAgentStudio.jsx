@@ -15,6 +15,14 @@ export default function DesignAgentStudio({
   onGenerationEnd,
   onGenerationComplete,
   onGenerationError,
+  // fyt 本地画布：透传给 CreativeCanvas，素材不上传、项目文件本地保存。
+  localCanvas = false,
+  onLocalFiles = null,
+  isLocalSource = null,
+  onLocalClear = null,
+  onProjectDirtyChange = null,
+  canvasApiRef = null,
+  toolbarExtra = null,
 }) {
   const [userData, setUserData] = useState(null);
 
@@ -72,6 +80,13 @@ export default function DesignAgentStudio({
         onGenerationEnd={onGenerationEnd}
         onGenerationComplete={onGenerationComplete}
         onGenerationError={onGenerationError}
+        localCanvas={localCanvas}
+        onLocalFiles={onLocalFiles}
+        isLocalSource={isLocalSource}
+        onLocalClear={onLocalClear}
+        onProjectDirtyChange={onProjectDirtyChange}
+        canvasApiRef={canvasApiRef}
+        toolbarExtra={toolbarExtra}
       />
     </div>
   );

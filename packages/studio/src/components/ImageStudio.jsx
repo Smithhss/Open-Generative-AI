@@ -1611,6 +1611,7 @@ export default function ImageStudio({
                     {entry.prompt || copy.gallery.noPrompt}
                   </p>
                   {fytImage?.onOpenImage && <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button type="button" disabled={fytImage.transferring} className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-2 text-[11px] text-cyan-200 disabled:opacity-40" onClick={event => { event.stopPropagation(); void fytImage.onOpenImage(entry, 'design-agent'); }}>{locale === 'zh' ? '加入无限画布' : 'Add to canvas'}</button>
                     <button type="button" disabled={fytImage.transferring} className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-white/80 disabled:opacity-40" onClick={event => { event.stopPropagation(); void fytImage.onOpenImage(entry, 'layers'); }}>{locale === 'zh' ? '本地编辑' : 'Edit locally'}</button>
                   </div>}
                   <div className="flex items-center justify-between mt-1">

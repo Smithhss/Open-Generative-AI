@@ -12,6 +12,7 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
 import axios from 'axios';
 import FytAgentStudio from '@/components/fyt/FytAgentStudio';
 import FytImageStudio from '@/components/fyt/FytImageStudio';
+import FytCanvasStudio from '@/components/fyt/FytCanvasStudio';
 import FytVideoStudio from '@/components/fyt/FytVideoStudio';
 import { generatedImageFile } from '@/lib/fyt/image-transfer.mjs';
 import { getSessionRevision, getSessionState } from '@/lib/fyt/session.mjs';
@@ -1051,7 +1052,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
           <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><FytVideoStudio locale={locale} userId={fyt.userId} active={activeTab === 'video'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'layers' ? 'h-full w-full' : 'hidden'}><LayersStudio locale={locale} localOnly preserveOriginalPanel active={activeTab === 'layers'} incomingImage={imageTransfer?.target === 'layers' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           <div className={activeTab === 'agents' ? 'h-full w-full' : 'hidden'}><FytAgentStudio locale={locale} userId={fyt.userId} enabled={activeTab === 'agents'} onSettled={fyt.onGenerationSettled} /></div>
-          <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><DesignAgentStudio locale={locale} userEmail={fyt.userEmail} /></div>
+          <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio locale={locale} userEmail={fyt.userEmail} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           {activeTab === 'apps' && <AppsStudio locale={locale} />}
           {!['image', 'video', 'agents', 'layers', 'apps', 'design-agent'].includes(activeTab) && <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
               <h1 className="text-3xl font-black text-white">{tabLabel(activeTab)}</h1>
