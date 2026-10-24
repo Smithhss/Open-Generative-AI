@@ -84,6 +84,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
 
   // 画布只接受 blob 源；AI 产物是远端地址，先取回字节注册成本地素材。
   const resolveAgentAsset = useCallback(async url => {
+    console.info('[fyt-canvas] 开始转换', String(url).slice(0, 40));
     try {
       const scope = await authenticatedScope();
       let blob;
@@ -97,6 +98,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       const loaded = await loadLocalImage(file);
       sources.current.set(loaded.url, { ...loaded, file });
       if (alive.current) setSourceCount(sources.current.size);
+      console.info('[fyt-canvas] 转换成功', String(loaded.url).slice(0, 24));
       return loaded.url;
     } catch (error) {
       console.warn('[fyt-canvas] 产物转本地失败:', error?.message || error);
