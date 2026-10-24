@@ -344,3 +344,23 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 `modelOptions` 只改 `label`，`value` 始终是 fyt 真实模型名，不会因为显示名改动而调错模型。
 
 预发验证：`/create/zh/studio` 返回 200，产物块中包含「图生图」「FYT IMAGE EDIT」「GPT Image 2.5 Flare」「视频工作室」四处标记。
+
+### 7.6 清理二开遗留（C3 完成）
+
+| 对象 | 处理 | 理由 |
+|---|---|---|
+| `deploy/fyt-validation/` | 删除，容器/网络/数据卷/镜像一并移除 | SQLite + mock 上游的隔离环境，已被真实预发取代 |
+| `docs/archive/`（9 份过程计划 + 测试截图） | 删除 | 结论已并入本文，git 历史仍可查 |
+| `docs/fyt-feature-parity.md` | 删除 | 15 个工具的旧对齐表，早于导航收缩，已失效 |
+| `docs/fyt-development.md` | 重写 | 去掉验证环境引用，按当前接入状态重写 |
+| `lib/fyt/draft.mjs` | 删除 | 无生产引用，只有自己的测试在用 |
+| `fyt-studio-images` / `fyt-studio-validation` 工作树 | 移除 | 分支已并入 dev，validation 环境已废弃 |
+| 旧 studio 镜像 5 个 | 删除，保留 `staging-editors-20261023-v1` 作回退 | — |
+
+### 7.7 图片产物同源代理
+
+`GET /pg/images/artifact?url=` 只代理白名单域名（`IMAGE_ARTIFACT_HOSTS`），未配置时 503。前端把 https 外链改写为该地址，代理失败再回退直连。
+
+预发实测：代理真实产物 200 / `image/png` / 599,745 字节；`evil.com` 400；匿名 401。fyt 侧 PR #110，前端提交 `3d68588` / `ec6c2db`。
+
+遗留：生产尚未配置 `IMAGE_ARTIFACT_HOSTS`，工作台上线前必须同步，否则图片会走 503 回退到直连。
