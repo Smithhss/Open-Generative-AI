@@ -2,10 +2,13 @@ name: fyt-creative-staging
 
 services:
   studio:
-    image: fyt-studio:staging-20261025-v47
+    image: fyt-studio:staging-20261025-v48
     build:
       context: ../..
       dockerfile: deploy/fyt-staging/Dockerfile
+      args:
+        # 子域部署留空；老的 /create 路径部署改成 /create
+        NEXT_PUBLIC_STUDIO_BASE_PATH: 
     restart: unless-stopped
     environment:
       # 画布 AI 从容器内部直接调 Go 网关，鉴权沿用浏览器带来的 cookie / Bearer。
@@ -17,7 +20,7 @@ services:
       fyt:
         aliases: [fyt-studio]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/create/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 10s
       retries: 4

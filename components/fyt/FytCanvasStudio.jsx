@@ -34,7 +34,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
   const [ticket, setTicket] = useState(null);
   useEffect(() => {
     let disposed = false;
-    const endpoint = `${process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' ? '/create' : ''}/api/v1/creative-agent/ticket`;
+    const endpoint = `${process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || ''}/api/v1/creative-agent/ticket`;
 
     const refreshTicket = async () => {
       try {

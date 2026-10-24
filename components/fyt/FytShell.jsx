@@ -35,13 +35,13 @@ function FytAccountControls({ session, locale, authError, checkSession, balanceR
   }
   function signIn() {
     const currentPath = window.location.pathname;
-    const target = /^\/create\/(?:zh\/)?studio(?:\/[a-z0-9-]+)?$/.test(currentPath)
-      ? currentPath : (zh ? '/create/zh/studio' : '/create/studio');
+    const target = /^(?:\/create)?\/(?:zh\/)?studio(?:\/[a-z0-9-]+)?$/.test(currentPath)
+      ? currentPath : (zh ? `${BASE}/zh/studio` : `${BASE}/studio`);
     window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
   }
   const buttonClass = 'px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50';
   return <>
-    <a href={zh ? '/create/studio' : '/create/zh/studio'} className={buttonClass}>{zh ? 'EN' : '中文'}</a>
+    <a href={zh ? `${BASE}/studio` : `${BASE}/zh/studio`} className={buttonClass}>{zh ? 'EN' : '中文'}</a>
     {session.status === 'authenticated' ? <>
       <button className={buttonClass} onClick={() => setReload(value => value + 1)} title={error || (zh ? '刷新余额' : 'Refresh balance')} aria-label={zh ? '刷新余额' : 'Refresh balance'}>
         <span className="hidden sm:inline mr-2">{session.user?.username}</span>
@@ -57,6 +57,9 @@ function FytAccountControls({ session, locale, authError, checkSession, balanceR
     {error && <span role="alert" className="absolute right-4 top-full mt-1 text-xs text-red-300 bg-[#111] p-2 rounded">{error}</span>}
   </>;
 }
+
+// 子域部署时为空，老的 /create 路径部署时是 '/create'
+const BASE = process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || '';
 
 export default function FytShell({ locale = 'en' }) {
   const session = useSyncExternalStore(subscribeSession, getSessionState, getServerSessionState);

@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['studio', 'ai-agent', 'workflow-builder', 'design-agent'],
-  basePath: process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' ? '/create' : '',
+  // 子域部署时留空；老的 /create 路径部署可以显式设成 '/create'
+  basePath: process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || '',
   output: process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt' ? 'standalone' : undefined,
   async rewrites() {
     // Local validation only. Production routes these paths directly to Go.

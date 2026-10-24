@@ -366,7 +366,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
     (categoryId) => copy.categories?.[categoryId] || NAVIGATION_CATEGORIES.find((c) => c.id === categoryId)?.label || categoryId,
     [copy],
   );
-  const studioPath = useCallback((tabId) => `${fytMode ? '/create' : ''}${localizeStudioPath(locale, tabId)}`, [locale, fytMode]);
+  const studioPath = useCallback((tabId) => `${process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || ''}${localizeStudioPath(locale, tabId)}`, [locale]);
 
   // Helper to extract workflow details precisely from either route structure
   const getWorkflowInfo = useCallback(() => {
@@ -563,7 +563,10 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
   // Popstate event listener to sync tab state with URL on back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      const path = fytMode ? window.location.pathname.replace(/^\/create(?=\/|$)/, '') : window.location.pathname;
+      const base = process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || '';
+      const path = base && window.location.pathname.startsWith(base)
+        ? window.location.pathname.slice(base.length) || '/'
+        : window.location.pathname;
       // Strip the locale root prefix (if any) before reading the
       // /studio/<tab> segment, so this works for both /studio/<tab> and
       // /<locale>/studio/<tab>.
