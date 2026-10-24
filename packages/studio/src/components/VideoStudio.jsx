@@ -783,6 +783,8 @@ export default function VideoStudio({
   locale = "en",
   previewMode = false,
   persistenceId = null,
+  // fyt 模式：生成走 fyt 网关，参数条换成 fyt 的控件；其余布局与画廊保持原样。
+  fytVideo = null,
 }) {
   const copy = useMemo(() => resolveCopy(en, zh, locale), [locale]);
   const LEGACY_PERSIST_KEY = "hg_video_studio_persistent";
@@ -2090,6 +2092,29 @@ export default function VideoStudio({
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (previewMode) return;
+    if (fytVideo) {
+      if (!fytVideo.enabled || generating) return;
+      setGenerating(true);
+      try {
+        const result = await fytVideo.generate({ prompt: prompt.trim() });
+        if (result?.url) {
+          const entry = {
+            id: result.id || `fyt-${Date.now()}`,
+            url: result.url,
+            prompt: prompt.trim(),
+            model: result.model || "fyt",
+            createdAt: Date.now(),
+          };
+          addToLocalHistory(entry);
+          showVideoInCanvas(entry.url, entry.model);
+        }
+      } catch (error) {
+        fytVideo.onError?.(error);
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
     if (mediaUploading || workflowUploadSlotRef.current) {
       toast.error(copy.errors.waitForCurrentUpload);
       return;
@@ -2336,6 +2361,9 @@ export default function VideoStudio({
   }, [
     apiKey,
     previewMode,
+    fytVideo,
+    addToLocalHistory,
+    showVideoInCanvas,
     copy,
     prompt,
     promptDisabled,
@@ -2953,6 +2981,7 @@ export default function VideoStudio({
           {/* Bottom row: controls + generate */}
           <PromptFooter>
             <PromptControls ref={dropdownRef}>
+              {fytVideo ? fytVideo.controls : <>
               {/* Model btn */}
               <div className="relative">
                 <button
@@ -3404,12 +3433,13 @@ export default function VideoStudio({
                   <span className={PROMPT_CONTROL_LABEL_CLASS}>{copy.controls.draw}</span>
                 </button>
               )}
+              </>}
             </PromptControls>
 
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={previewMode || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={previewMode || generating || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>
