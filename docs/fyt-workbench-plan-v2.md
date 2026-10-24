@@ -406,3 +406,18 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 建议：**先不动**，等上游真的改了 `LayersStudio` 再按当时冲突范围决定；如果那时冲突多，优先抽 hook 而不是复制文件。
 
 已完成的 P5 部分：删掉 shell 顶部调试横幅；图片/视频两页的自定义壳收敛为「原版组件 + 胶囊参数条」，不再各自维护一套标题区。
+
+### 7.11 视频与探索应用改回原版组件（2026-10-24 晚）
+
+按「一切符合原版」的硬要求，两个自建页面换回上游组件，只保留 fyt 的生成注入。
+
+| 页面 | 之前 | 现在 |
+|---|---|---|
+| 视频 | 自建 `FytVideoStudio` 面板（自有标题、布局、结果区） | 原版 `VideoStudio` + `fytVideo` 注入：参数条换成 fyt 胶囊，生成走 fyt，**结果写入原版画廊**（`addToLocalHistory` + `showVideoInCanvas`） |
+| 探索应用 | 自建 `FytAppsStudio` 工具目录 | 原版 `AppsStudio`（不传 apiKey，兴趣登记自然失效），卡片/缩略图/链接全部原样 |
+
+`FytVideoStudio` 从 200 行面板缩成薄壳：只负责参数、提交、轮询，界面一行不画。
+
+### 踩到的坑（值得记住）
+
+原版 `handleGenerate` 第一行是 `if (previewMode) return;`，而 fyt 模式为了隔离持久化键必须传 `previewMode`。注入的 fyt 分支如果排在它后面，**永远不会执行，点生成毫无反应**。`ImageStudio` 原本就是先判 `fytImage` 再判 `previewMode`，视频这边照抄这个顺序才对。
