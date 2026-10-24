@@ -364,3 +364,19 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 预发实测：代理真实产物 200 / `image/png` / 599,745 字节；`evil.com` 400；匿名 401。fyt 侧 PR #110，前端提交 `3d68588` / `ec6c2db`。
 
 遗留：生产尚未配置 `IMAGE_ARTIFACT_HOSTS`，工作台上线前必须同步，否则图片会走 503 回退到直连。
+
+### 7.8 T0.3 完成：模型能力表与尺寸选择
+
+原计划的 T0.3 要求「尺寸/数量从 model_meta 读」，但 `with_meta=1` 只返回模型类别，没有参数元数据。所以先在 fyt 后端补字段（PR #112），再让前端消费。
+
+尺寸不是猜的，是预发实测的：
+
+| 请求 | 产物 |
+| --- | --- |
+| `gpt-image-2.5-flare` + `size=1536x1024` | 1536×1024 |
+| `gpt-image-2.5-flare` + `size=1024x1536` | 1024×1536 |
+| 不带 size | 1024×1024 |
+
+`gemini-3.1-flash-image` 分组无可用渠道，无法验证，因此不返回 `sizes` —— 前端隐藏尺寸选项，而不是发一个上游会静默忽略的参数。
+
+前端：`getImageModels` 返回 `{ models, capabilities }`，尺寸下拉只在 capabilities 有 `sizes` 时出现；`imageGenerationBody` 只接受 `宽x高` 形式的 size，非法值不进请求体。
