@@ -87,11 +87,23 @@ fyt 模式的 middleware 会拒绝整个 `/create/api/*`（避免旧页面拿 Mu
 
 **验收**：画布右侧输入「一只在雨里的柴犬，电影感」，事件流走到 done，图片自动出现在画布上，额度正确扣减。
 
-### P2 视需要（不排期）
+### P2 参考图改图（已完成，2026-10-24）
+
+| 能力 | 实现 |
+|---|---|
+| 生成结果可复用 | 出图后登记进会话资产，下一轮能被引用 |
+| 选中即改 | chat 读 `canvas_state.selected`，命中图片资产时改走 `/pg/images/edits` |
+| 结果摆放 | `tool_result` 带 `source_asset_id`，前端把新图摆在原图右侧 |
+| 附件上传 | 新增 `GET files/:id` 与 `POST sessions/:id/assets`，字节留在本进程，不落第三方存储 |
+
+**实测**：第一轮生成得到 `asset_xxx`；第二轮带 `canvas_state.selected=asset_xxx` 发「把杯子换成玻璃杯」，
+事件流为 `text → text → tool_call(edit_image) → tool_result(edit_image, source_asset_id=asset_xxx)`。
+
+### P3 视需要（不排期）
 
 - 多张图 / 局部重绘
-- 参考图编辑（把画布选中元素作为输入）
 - 流式输出（边想边出）
+- 会话持久化到磁盘（当前在内存，重启即失效）
 
 ---
 
