@@ -8,6 +8,8 @@ import {
   imageEditFormData,
   MAX_EDIT_BYTES,
   imageArtifactUrl,
+  normalizeImageSize,
+  pickCapabilities,
 } from '../lib/fyt/images.mjs';
 
 test('image capability keeps every image model the server reports, deduplicated', () => {
@@ -108,4 +110,33 @@ test('external artifacts are rewritten to the same-origin proxy', () => {
   assert.equal(imageArtifactUrl('data:image/png;base64,AAAA'), 'data:image/png;base64,AAAA');
   assert.equal(imageArtifactUrl(''), '');
   assert.equal(imageArtifactUrl(null), null);
+});
+
+test('image size is only forwarded when it looks like width x height', () => {
+  assert.equal(normalizeImageSize(' 1536X1024 '), '1536x1024');
+  assert.equal(normalizeImageSize('1024'), '');
+  assert.equal(normalizeImageSize('1024x'), '');
+  assert.equal(normalizeImageSize('auto'), '');
+  assert.equal(normalizeImageSize(undefined), '');
+  assert.deepEqual(
+    imageGenerationBody({ model: 'gpt-image-2.5-flare', group: 'default', prompt: 'hi', size: '1536x1024' }),
+    { model: 'gpt-image-2.5-flare', group: 'default', prompt: 'hi', n: 1, response_format: 'b64_json', stream: false, size: '1536x1024' },
+  );
+  // 非法尺寸不进入请求体，而不是发一个上游会拒绝的参数
+  assert.equal(imageGenerationBody({ model: 'm', group: 'default', prompt: 'hi', size: 'huge' }).size, undefined);
+});
+
+test('capabilities are trimmed to the models the group actually returned', () => {
+  const raw = {
+    'gpt-image-2.5-flare': { kind: 'image', sizes: ['1024x1024', '1536x1024'], default_size: '1024x1024', max_n: 1, supports_edit: true },
+    'gemini-3.1-flash-image': { kind: 'image', sizes: [], max_n: 1, supports_edit: true },
+    'unused-model': { kind: 'image', sizes: ['1x1'] },
+  };
+  const picked = pickCapabilities(raw, ['gpt-image-2.5-flare', 'gemini-3.1-flash-image']);
+  assert.deepEqual(Object.keys(picked).sort(), ['gemini-3.1-flash-image', 'gpt-image-2.5-flare']);
+  assert.deepEqual(picked['gpt-image-2.5-flare'].sizes, ['1024x1024', '1536x1024']);
+  assert.equal(picked['gpt-image-2.5-flare'].defaultSize, '1024x1024');
+  assert.deepEqual(picked['gemini-3.1-flash-image'].sizes, []);
+  assert.deepEqual(pickCapabilities(null, ['a']), {});
+  assert.deepEqual(pickCapabilities(raw, null), {});
 });
