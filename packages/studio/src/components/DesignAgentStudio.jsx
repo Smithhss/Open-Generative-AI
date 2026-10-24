@@ -40,9 +40,8 @@ export default function DesignAgentStudio({
       // fyt 模式：画布把 localStorage.token 当 Bearer 发出去，这里放入会话访问令牌。
       // 只在本组件挂载期间存在，卸载时清掉。
       localStorage.setItem("token", authToken);
-    } else {
-      localStorage.removeItem("token");
     }
+    // 既没有 apiKey 也没有 authToken 时不要动这个键：外层（fyt 画布）会自己维护它。
   }
 
   useEffect(() => {
