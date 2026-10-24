@@ -83,7 +83,7 @@ async function downloadImage(url, filename) {
 
 // ─── UploadButton (inline picker) ───────────────────────────────────────────
 
-function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], label = null, persistedHistory = null, onHistoryChange = null, copy, previewMode = false }) {
+function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], label = null, persistedHistory = null, onHistoryChange = null, copy, previewMode = false, localOnly = false, onLocalFile = null }) {
   const t = copy.uploadButton;
   const [panelOpen, setPanelOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -199,6 +199,19 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], 
       alert(
         t.tooLargeAlert.replace("{names}", tooLarge.map((f) => f.name).join(", ")),
       );
+      return;
+    }
+
+    if (localOnly) {
+      // fyt 模式：源图只留在浏览器里，随生成请求直接上传，不经过第三方存储。
+      const entries = files.slice(0, maxImages).map((file) => {
+        const url = URL.createObjectURL(file);
+        onLocalFile?.(file, url);
+        return { url };
+      });
+      setSelectedEntries(entries);
+      fireOnSelect(entries);
+      setPanelOpen(false);
       return;
     }
 
@@ -1013,6 +1026,8 @@ export default function ImageStudio({
   // ── Prompt / upload state ───────────────────────────────────────────────
   const [prompt, setPrompt] = useState("");
   const [uploadedImageUrls, setUploadedImageUrls] = useState([]);
+  // fyt 模式的上传只产生 objectURL，真正的 File 存在这里，生成时取出来直接提交。
+  const fytLocalFiles = useRef(new Map());
   const [swapImageUrl, setSwapImageUrl] = useState(null);
   const [uploadHistory, setUploadHistory] = useState([]); // persisted reference images history
 
@@ -1307,6 +1322,20 @@ export default function ImageStudio({
     [applySelectedVariant],
   );
 
+  // fyt 模式：不依赖上游的参考图变体，选中即用。
+  const handleFytUploadSelect = useCallback(({ urls }) => {
+    setUploadedImageUrls((urls || []).slice(0, 1));
+  }, []);
+
+  const handleFytUploadClear = useCallback(() => {
+    fytLocalFiles.current.clear();
+    setUploadedImageUrls([]);
+  }, []);
+
+  const handleFytLocalFile = useCallback((file, url) => {
+    fytLocalFiles.current.set(url, file);
+  }, []);
+
   const handleUploadClear = useCallback(() => {
     setUploadedImageUrls([]);
     const selection = selectionRef.current;
@@ -1370,7 +1399,10 @@ export default function ImageStudio({
       if (generating || !fytImage.enabled || !prompt.trim()) return;
       setGenerating(true); setGenerateError(null);
       try {
-        const result = await fytImage.generate(prompt);
+        const localFile = uploadedImageUrls.map((url) => fytLocalFiles.current.get(url)).find(Boolean);
+        const result = localFile && fytImage.generateEdit
+          ? await fytImage.generateEdit({ prompt: prompt.trim(), file: localFile })
+          : await fytImage.generate(prompt);
         addToHistory({ id: crypto.randomUUID(), url: result.url, prompt: prompt.trim(), model: 'gpt-image-2', aspect_ratio: 'auto', timestamp: new Date().toISOString(), requestId: result.requestId });
       } catch (error) {
         setGenerateError(fytImage.errorCopy(error));
@@ -1667,17 +1699,19 @@ export default function ImageStudio({
               ))}
               
               {/* Main Upload Trigger */}
-              {!fytImage && referenceVariant && uploadedImageUrls.length < referenceImageLimit && (
+              {(fytImage ? fytImage.supportsEdit : Boolean(referenceVariant)) && uploadedImageUrls.length < (fytImage ? 1 : referenceImageLimit) && (
                 <UploadButton
                   apiKey={apiKey}
                   previewMode={previewMode}
-                  maxImages={referenceImageLimit}
-                  onSelect={handleUploadSelect}
-                  onClear={handleUploadClear}
+                  maxImages={fytImage ? 1 : referenceImageLimit}
+                  onSelect={fytImage ? handleFytUploadSelect : handleUploadSelect}
+                  onClear={fytImage ? handleFytUploadClear : handleUploadClear}
                   initialUrls={uploadedImageUrls}
                   persistedHistory={uploadHistory}
                   onHistoryChange={setUploadHistory}
                   copy={copy}
+                  localOnly={Boolean(fytImage)}
+                  onLocalFile={handleFytLocalFile}
                 />
               )}
 

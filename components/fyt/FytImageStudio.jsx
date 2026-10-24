@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
-import { getImageModels, generateFytImage } from '@/lib/fyt/images.mjs';
+import { getImageModels, generateFytImage, generateFytImageEdit } from '@/lib/fyt/images.mjs';
 import { modelOptions } from '@/lib/fyt/model-alias.mjs';
-import FytImageEditStudio from '@/components/fyt/FytImageEditStudio';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
   const zh = locale === 'zh';
@@ -20,8 +19,6 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
-  const [mode, setMode] = useState('generate');
-  const [editRunning, setEditRunning] = useState(false);
   const run = useRef(null);
   const errorCopy = error => {
     const code = error?.message || '';
@@ -65,6 +62,13 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     finally { run.current = null; setRunning(false); if (!controller.signal.aborted) onSettled?.(); }
   }
 
+  async function generateEdit({ prompt, file }) {
+    if (run.current || !model || modelGroup !== group || !group || !userId) throw new Error('INVALID_IMAGE_REQUEST');
+    const controller = new AbortController(); run.current = controller; setRunning(true);
+    try { return await generateFytImageEdit({ model, group, prompt, file }, { signal: controller.signal }); }
+    finally { run.current = null; setRunning(false); if (!controller.signal.aborted) onSettled?.(); }
+  }
+
   // 与原版底部参数条同一套视觉：深色底、细边、圆角胶囊。
   const pill = 'rounded-full border border-white/10 bg-[#151515] px-3 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40 disabled:hover:border-white/10';
   const pillActive = 'border-cyan-400/50 bg-cyan-400/10 text-cyan-200';
@@ -81,20 +85,21 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
       onChange={event => setSize(event.target.value)}>
       {sizes.map(value => <option key={value} value={value}>{value}</option>)}
     </select>}
-    <button type="button" className={pill} onClick={() => setMode('edit')} disabled={!userId || running}>
-      {zh ? '图生图' : 'Image edit'}
-    </button>
     {!loading && userId && !models.length && <button type="button" className={pill} onClick={() => setReload(value => value + 1)}>{zh ? '重试' : 'Retry'}</button>}
     {error && <span className="text-[11px] text-red-300/90">{error}</span>}
   </div>;
 
   return <div className="h-full relative">
-    <div className={mode === 'edit' ? 'hidden' : 'h-full'}>
-      <ImageStudio locale={locale} previewMode persistenceId={userId}
-        fytImage={{ enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running), generate, controls, errorCopy, onOpenImage, transferring }} />
-    </div>
-    {mode === 'edit' && <FytImageEditStudio locale={locale} userId={userId} group={group} model={model} models={models}
-      running={editRunning} onRunningChange={setEditRunning} onSettled={onSettled} errorCopy={errorCopy}
-      onBack={() => setMode('generate')} />}
+    <ImageStudio locale={locale} previewMode persistenceId={userId}
+      fytImage={{
+        enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running),
+        generate,
+        generateEdit,
+        supportsEdit: true,
+        controls,
+        errorCopy,
+        onOpenImage,
+        transferring,
+      }} />
   </div>;
 }
