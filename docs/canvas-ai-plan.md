@@ -75,7 +75,7 @@ fyt 模式的 middleware 会拒绝整个 `/create/api/*`（避免旧页面拿 Mu
 
 `CreativeCanvas` 开透传口（`localCanvas` / `onLocalFiles` / `isLocalSource` / `onLocalClear` / `onProjectDirtyChange` / `canvasApiRef` / `toolbarExtra`），`FytCanvasStudio` 改成薄壳，工具栏插入「打开项目 / 保存项目 / 导入图片 / 导出PNG / 清空」。
 
-### P1 画布 AI 最小闭环（2–3 天）
+### P1 画布 AI 最小闭环（已完成，2026-10-24）
 
 | 任务 | 说明 |
 |---|---|
@@ -102,3 +102,35 @@ fyt 模式的 middleware 会拒绝整个 `/create/api/*`（避免旧页面拿 Mu
 | SSE 事件结构对不上 | 前端消费方式只能从 `CreativeCanvas` 源码反推 | 先做「最简事件」跑通，再逐个补字段 |
 | 路由放行过宽 | 放行 `/create/api/*` 会重新暴露 MuAPI 代理 | 只匹配 `creative-agent` 这一个前缀 |
 | 内存态丢失 | 服务重启会话消失 | 会话元数据存 localStorage，消息也存前端 |
+
+---
+
+## 7. P1 实施记录
+
+实现文件：`lib/fyt/creative-agent.mjs`，路由 `app/api/v1/creative-agent/[[...path]]/route.js` 在 fyt 模式下分流到它。
+
+### 7.1 与计划的偏差
+
+| 计划 | 实际 | 原因 |
+|---|---|---|
+| SSE 推事件 | **轮询** `GET /jobs/:id/events?since=N` | 读前端源码发现它就是轮询，不是 SSE |
+| 9 个端点 | 实现了 8 个（`run-skill` 直接拒绝） | 技能不在最小闭环内 |
+
+事件类型对齐前端消费方式：`text`（追加到消息）、`tool_call`（生成中占位）、`tool_result`（带 `asset` 落到画布）、`error`。
+
+### 7.2 实测（预发）
+
+```
+POST /sessions                          → {id}
+POST /sessions/:id/chat                 → {job_id}
+GET  /jobs/:id/events?since=0           → text → text → tool_call → tool_result, done=true
+GET  /pg/images/artifact?url=...        → 200 image/png 1024×1024
+```
+
+提示词由文本模型整理，图片走 `/pg/images/generations`，额度正常扣减。
+
+### 7.3 已知限制
+
+- 会话与任务在模块内存里，服务重启即失效
+- 只出单张图，不做多步编排与参考图编辑
+- 模型渠道不通时按优先级回退，最多试三个
