@@ -241,7 +241,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
     <button type="button" className={tool} disabled={busy || !ready} onClick={() => imageInput.current?.click()}>{busy ? (zh ? '导入中…' : 'Importing…') : (zh ? '导入图片' : 'Import')}</button>
     <button type="button" className={tool} disabled={busy || !ready} onClick={() => canvas.current?.exportCanvas()}>{zh ? '导出PNG' : 'Export'}</button>
     <button type="button" className={tool} disabled={busy || !ready} onClick={() => canvas.current?.clearCanvas()}>{zh ? '清空' : 'Clear'}</button>
-    {dirty && <span className="text-[10px] text-amber-300 px-1">{zh ? '未保存' : 'Unsaved'}</span>}
+    {dirty && <span className="text-[10px] text-amber-300 px-1 whitespace-nowrap">{zh ? '未保存' : 'Unsaved'}</span>}
   </>;
 
   return <div className="h-full flex flex-col">
