@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { availableImageModels, imageGenerationBody, normalizeGeneratedImage } from '../lib/fyt/images.mjs';
+import {
+  availableImageModels,
+  imageGenerationBody,
+  normalizeGeneratedImage,
+  validateEditFile,
+  imageEditFormData,
+  MAX_EDIT_BYTES,
+} from '../lib/fyt/images.mjs';
 
 test('image capability keeps every image model the server reports, deduplicated', () => {
   assert.deepEqual(availableImageModels(['gpt-image-2','deepseek','gpt-image-2']), ['gpt-image-2','deepseek']);
@@ -60,4 +67,32 @@ test('expired image session clears authentication without reissuing the POST', a
     await assert.rejects(generateFytImage({model:'gpt-image-2',group:'default',prompt:'cup'}),/AUTH_REQUIRED/);
     assert.equal(calls,1);assert.equal(getSessionState().status,'anonymous');
   } finally { globalThis.fetch=original;clearSession(); }
+});
+
+test('image edit only accepts raster images within the size limit', () => {
+  assert.equal(validateEditFile({ type: 'image/png', size: 1024 }), 'image/png');
+  assert.equal(validateEditFile({ type: 'IMAGE/JPEG', size: 1024 }), 'image/jpeg');
+  for (const file of [
+    { type: 'image/svg+xml', size: 1024 },
+    { type: 'application/pdf', size: 1024 },
+    { type: 'image/png', size: 0 },
+    { type: 'image/png', size: MAX_EDIT_BYTES + 1 },
+    {},
+  ]) assert.throws(() => validateEditFile(file), /INVALID_EDIT_FILE/);
+});
+
+test('image edit form carries model, group, prompt and the file itself', () => {
+  const file = new File([new Uint8Array([1, 2, 3])], 'ref.png', { type: 'image/png' });
+  const form = imageEditFormData({ model: ' gpt-image-2.5-flare ', group: 'default', prompt: ' make it wood ', file });
+  assert.equal(form.get('model'), 'gpt-image-2.5-flare');
+  assert.equal(form.get('group'), 'default');
+  assert.equal(form.get('prompt'), 'make it wood');
+  assert.equal(form.get('n'), '1');
+  assert.ok(form.get('image') instanceof File);
+  for (const params of [
+    { model: '', group: 'default', prompt: 'x', file },
+    { model: 'm', group: '', prompt: 'x', file },
+    { model: 'm', group: 'default', prompt: ' ', file },
+    { model: 'm', group: 'default', prompt: 'x', file: { type: 'image/gif', size: 10 } },
+  ]) assert.throws(() => imageEditFormData(params), /INVALID_IMAGE_REQUEST|INVALID_EDIT_FILE/);
 });

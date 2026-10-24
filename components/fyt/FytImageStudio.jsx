@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import { getImageModels, generateFytImage } from '@/lib/fyt/images.mjs';
+import FytImageEditStudio from '@/components/fyt/FytImageEditStudio';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
   const zh = locale === 'zh';
@@ -17,6 +18,8 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [originalPreview, setOriginalPreview] = useState(false);
+  const [mode, setMode] = useState('generate');
+  const [editRunning, setEditRunning] = useState(false);
   const run = useRef(null);
   const errorCopy = error => {
     const code = error?.message || '';
@@ -70,13 +73,18 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   </div>;
   return <div className="h-full flex flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#0b0b0d] px-4 py-2">
+      <button type="button" aria-pressed={mode === 'generate'} className={`${field} ${mode === 'generate' ? 'border-cyan-400/40 text-cyan-200' : ''}`} onClick={() => setMode('generate')}>{zh ? '文生图' : 'Text to image'}</button>
+      <button type="button" aria-pressed={mode === 'edit'} className={`${field} ${mode === 'edit' ? 'border-cyan-400/40 text-cyan-200' : ''}`} onClick={() => setMode('edit')}>{zh ? '图生图（上传参考图）' : 'Image edit (upload)'}</button>
+      <span className="w-px h-5 bg-white/10" />
       <button type="button" aria-pressed={!originalPreview} className={`${field} ${!originalPreview ? 'border-cyan-400/40 text-cyan-200' : ''}`} onClick={() => setOriginalPreview(false)}>{zh ? 'fyt 已接入' : 'Connected to fyt'}</button>
       <button type="button" aria-pressed={originalPreview} className={`${field} ${originalPreview ? 'border-cyan-400/40 text-cyan-200' : ''}`} onClick={() => setOriginalPreview(true)}>{zh ? '原版完整界面' : 'Full original interface'}</button>
       <span className="text-[11px] text-white/45">{originalPreview ? (zh ? '保留原模型目录和参数展示，仅供预览；实际生图请切回 fyt 已接入。' : 'Original model catalog and parameters are for preview. Switch back to fyt to generate.') : (zh ? '已接入模型可实际生成，原版控件仍可在另一视图查看。' : 'Connected models can generate; original controls remain available in the other view.')}</span>
     </div>
     <div className="flex-1 min-h-0 relative">
-      <div className={originalPreview ? 'hidden' : 'h-full'}><ImageStudio locale={locale} previewMode persistenceId={userId} fytImage={{ enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running), generate, controls, errorCopy, onOpenImage, transferring }} /></div>
+      <div className={originalPreview || mode === 'edit' ? 'hidden' : 'h-full'}><ImageStudio locale={locale} previewMode persistenceId={userId} fytImage={{ enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running), generate, controls, errorCopy, onOpenImage, transferring }} /></div>
       {originalPreview && <div className="h-full"><ImageStudio locale={locale} previewMode /></div>}
+      {!originalPreview && mode === 'edit' && <FytImageEditStudio locale={locale} userId={userId} group={group} model={model} models={models}
+        running={editRunning} onRunningChange={setEditRunning} onSettled={onSettled} errorCopy={errorCopy} />}
     </div>
   </div>;
 }
