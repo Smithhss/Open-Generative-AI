@@ -98,7 +98,8 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       sources.current.set(loaded.url, { ...loaded, file });
       if (alive.current) setSourceCount(sources.current.size);
       return loaded.url;
-    } catch {
+    } catch (error) {
+      console.warn('[fyt-canvas] 产物转本地失败:', error?.message || error);
       return null;
     }
   }, []);
