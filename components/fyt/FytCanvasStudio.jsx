@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { DesignAgentStudio } from 'studio';
 import { authenticatedScope } from '@/lib/fyt/chat.mjs';
+import { getSessionState, subscribeSession } from '@/lib/fyt/session.mjs';
 import { loadLocalImage, validateLocalImageFile } from '../../packages/studio/src/localImage.js';
 import { MAX_PROJECT_BYTES, buildCanvasProject, parseCanvasProject, prepareCanvasProject } from '../../packages/Open-AI-Design-Agent/packages/design-agent/src/localCanvasProject.js';
 
@@ -27,6 +28,21 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
   const generation = useRef(0);
   const importing = useRef(false);
   const currentImport = useRef(null);
+
+  // 画布把 localStorage.token 当 Bearer 发出去；令牌会刷新，必须跟着会话走，
+  // 否则渲染时写一次，过期后就一直是无效令牌。
+  useEffect(() => {
+    const sync = () => {
+      const state = getSessionState();
+      try {
+        if (state.status === 'authenticated' && state.accessToken) localStorage.setItem('token', state.accessToken);
+        else localStorage.removeItem('token');
+      } catch { /* 隐私模式忽略 */ }
+    };
+    sync();
+    const unsubscribe = subscribeSession(sync);
+    return () => { unsubscribe?.(); };
+  }, []);
 
   const onProjectDirtyChange = useCallback(value => { dirtyRef.current = value; setDirty(value); }, []);
 
