@@ -290,3 +290,45 @@ return models.includes('gpt-image-2') ? ['gpt-image-2'] : [];
 
 遗留建议：fyt 侧增加图片产物代理，避免上游外链过期与跨域下载失败。
 
+
+---
+
+## 7. 执行记录（2026-10-24 晚）
+
+### 7.1 生产视频上线
+
+上游 `api.52pay.com` 的模型目录已变化：`MiniMax-H3` 消失，`seedance-2.0` 变成死别名（映射到已下架的 `doubao-seedance-2-0-260128`），只有 `seedance-2.5` 可用。
+
+| 对象 | 变更 | 回滚 |
+|---|---|---|
+| 生产渠道 29 | 新建 `type=55`（Sora），`base_url=https://api.52pay.com`，模型 `seedance-2.5` | `delete from channels where id=29;` + 对应 abilities 行 |
+| 生产 ModelPrice | 新增 `seedance-2.5 = 0.12422360248447205`（与 seedance-2.0 同价） | 从 JSON 里删掉该键 |
+
+生产实测：`POST /v1/videos` → `task_KyHfLhsxPnuN5Qzgp5tiUneHSZUG7lf3`，3 分 45 秒后 `completed`，扣 248,444 quota，产物 1280×720 / 4.06s / 3.58MB，`/v1/videos/:id/content` 直出 200。
+
+### 7.2 T1.5 完成：刷新续查
+
+同时修掉两个会让视频永远不出结果的缺陷：
+
+| 问题 | 影响 | 修复 |
+|---|---|---|
+| 查询接口返回 `{code,data:{status}}`，前端读顶层 `body.status` | 永远拿到 `unknown`，轮询跑满 200 次也不停 | 新增 `unwrapTask` |
+| 状态是大写 `SUCCESS` / `IN_PROGRESS`，前端按小写比较 | 完成也不出视频 | 新增 `normalizeStatus` 统一词表 |
+
+任务标识按 `userId` 写入 `localStorage`，刷新后自动续查；已结束的任务直接展示结果。
+
+### 7.3 P2 完成：图生图
+
+后端 `POST /pg/images/edits` 此前 400「未指定模型名称」：`getModelRequest` 的图片分支用原始路径判断，`/pg` 不匹配；通用分支又把 multipart 整体跳过。修复后预发实测 200 / 28.6s / 1024×1024，扣费与文生图一致。
+
+前端新增 `FytImageEditStudio`，不改上游 `ImageStudio`（上游在上传槽位写了 `!fytImage`，直接改会抬高同步成本）。
+
+### 7.4 剩余任务
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| T0.3 | 图片尺寸/张数能力 | 阻塞：`with_meta=1` 只返回模型类别，没有尺寸/张数元数据，需先补后端字段 |
+| P3 | 模型别名映射 | 未开始 |
+| T4.2 | 产物签名 URL | 未开始；当前图片产物是上游外链，建议先做 fyt 侧代理 |
+| P5 | 技术债：Layers wrapper、Shell 收敛 | 未开始 |
+| C3 | 归档 `deploy/fyt-validation/` | 待确认预发是否仍依赖 |
