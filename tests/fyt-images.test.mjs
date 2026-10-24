@@ -7,6 +7,7 @@ import {
   validateEditFile,
   imageEditFormData,
   MAX_EDIT_BYTES,
+  imageArtifactUrl,
 } from '../lib/fyt/images.mjs';
 
 test('image capability keeps every image model the server reports, deduplicated', () => {
@@ -95,4 +96,16 @@ test('image edit form carries model, group, prompt and the file itself', () => {
     { model: 'm', group: 'default', prompt: ' ', file },
     { model: 'm', group: 'default', prompt: 'x', file: { type: 'image/gif', size: 10 } },
   ]) assert.throws(() => imageEditFormData(params), /INVALID_IMAGE_REQUEST|INVALID_EDIT_FILE/);
+});
+
+test('external artifacts are rewritten to the same-origin proxy', () => {
+  assert.equal(
+    imageArtifactUrl('https://img.example.com/a b.png?x=1'),
+    '/pg/images/artifact?url=https%3A%2F%2Fimg.example.com%2Fa%20b.png%3Fx%3D1',
+  );
+  // 非 https 与空值原样返回，交给调用方处理
+  assert.equal(imageArtifactUrl('http://img.example.com/a.png'), 'http://img.example.com/a.png');
+  assert.equal(imageArtifactUrl('data:image/png;base64,AAAA'), 'data:image/png;base64,AAAA');
+  assert.equal(imageArtifactUrl(''), '');
+  assert.equal(imageArtifactUrl(null), null);
 });

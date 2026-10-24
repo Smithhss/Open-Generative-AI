@@ -97,7 +97,7 @@ export default function FytImageEditStudio({ locale, userId, group, model, model
           className="bg-[#22d3ee] text-black px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-40">
           {running ? (zh ? '生成中…' : 'Generating…') : (zh ? '生成图片' : 'Generate image')}
         </button>
-        {result?.external && <span className="text-[11px] text-white/40">{zh ? '产物为上游外链，请及时下载' : 'External artifact link, download it soon'}</span>}
+        {result?.external && <span className="text-[11px] text-white/40">{zh ? '经同源代理加载，请及时下载' : 'Loaded through the same-origin proxy; download it soon'}</span>}
       </div>
 
       {error && <p role="alert" className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{error}</p>}
