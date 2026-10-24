@@ -134,71 +134,69 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
     }
   }
 
-  const field = 'bg-[#151515] border border-white/10 rounded-lg px-3 py-2 text-xs text-white disabled:opacity-40';
+  // 与原版画布同一套视觉：深色底、圆角胶囊、底部提示词条。
+  const pill = 'rounded-full border border-white/10 bg-[#151515] px-3 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40 disabled:hover:border-white/10';
   const done = task && isSuccessStatus(status);
+  const failed = task && isTerminalStatus(status) && !isSuccessStatus(status);
 
-  return <div className="h-full overflow-y-auto p-5 md:p-8">
-    <div className="max-w-3xl mx-auto space-y-4">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-cyan-300 mb-2">FYT VIDEO</p>
-        <h1 className="text-2xl font-black mb-2">{zh ? '视频工作室' : 'Video studio'}</h1>
-        <p className="text-sm text-white/40">
-          {zh ? '任务提交后按 fyt 渠道异步执行，页面刷新可凭任务编号继续查询；失败按服务端规则退款。' : 'Tasks run asynchronously on fyt channels. Reload to resume by task id; failures refund per server rules.'}
-        </p>
-      </div>
+  return <div className="h-full flex flex-col bg-black">
+    <div className="flex flex-wrap items-center gap-1.5 px-4 py-3 border-b border-white/5">
+      <select aria-label={zh ? '视频分组' : 'Video group'} className={pill} value={group} disabled={!userId || running} onChange={event => setGroup(event.target.value)}>
+        {!groups.length && <option value="">{zh ? '无可用分组' : 'No group'}</option>}
+        {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+      </select>
+      <select aria-label={zh ? '视频模型' : 'Video model'} className={pill} value={model} disabled={!userId || running || !models.length} onChange={event => setModel(event.target.value)}>
+        {!models.length && <option value="">{zh ? '当前分组无视频模型' : 'No video model'}</option>}
+        {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+      </select>
+      <select aria-label={zh ? '时长' : 'Duration'} className={pill} value={seconds} disabled={running} onChange={event => setSeconds(Number(event.target.value))}>
+        {VIDEO_DURATIONS.map(value => <option key={value} value={value}>{value}s</option>)}
+      </select>
+      <select aria-label={zh ? '分辨率' : 'Resolution'} className={pill} value={size} disabled={running} onChange={event => setSize(event.target.value)}>
+        {VIDEO_SIZES.map(value => <option key={value} value={value}>{value}</option>)}
+      </select>
+      {task && <span className="text-[11px] text-white/35">{status === 'queued' ? (zh ? '排队中' : 'Queued') : status === 'in_progress' ? (zh ? '生成中' : 'Running') : status === 'completed' ? (zh ? '已完成' : 'Done') : status === 'failed' ? (zh ? '失败' : 'Failed') : status}</span>}
+    </div>
 
-      {!userId && <p className="text-sm text-amber-300">{zh ? '请先登录 fyt 后再生成。' : 'Sign in with fyt to generate.'}</p>}
+    <div className="flex-1 min-h-0 overflow-auto px-4 py-4">
+      {!task && <div className="h-full min-h-[320px] flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 text-white/30">
+        <p className="text-sm">{zh ? '描述一个镜头，生成一段视频' : 'Describe a shot to generate a video'}</p>
+        <p className="text-[11px] text-white/20">{zh ? '任务异步执行，刷新页面会按任务编号继续查询' : 'Runs asynchronously; reload resumes by task id'}</p>
+      </div>}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs text-white/50">{zh ? '分组' : 'Group'}
-          <select className={`${field} mt-1 w-full`} value={group} disabled={!userId || running} onChange={event => setGroup(event.target.value)}>
-            {!groups.length && <option value="">{zh ? '无可用分组' : 'No group'}</option>}
-            {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-white/50">{zh ? '视频模型' : 'Video model'}
-          <select className={`${field} mt-1 w-full`} value={model} disabled={!userId || running || !models.length} onChange={event => setModel(event.target.value)}>
-            {!models.length && <option value="">{zh ? '当前分组无视频模型' : 'No video model in this group'}</option>}
-            {modelOptions(models).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-white/50">{zh ? '时长（秒）' : 'Duration (s)'}
-          <select className={`${field} mt-1 w-full`} value={seconds} disabled={running} onChange={event => setSeconds(Number(event.target.value))}>
-            {VIDEO_DURATIONS.map(value => <option key={value} value={value}>{value}s</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-white/50">{zh ? '分辨率' : 'Resolution'}
-          <select className={`${field} mt-1 w-full`} value={size} disabled={running} onChange={event => setSize(event.target.value)}>
-            {VIDEO_SIZES.map(value => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-      </div>
+      {task && !done && !failed && <div className="h-full min-h-[320px] flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-[#0b0b0d] text-white/40">
+        <span className="text-sm">{zh ? '生成中，通常需要几分钟' : 'Generating, usually a few minutes'}</span>
+        <span className="text-[11px] text-white/25">{task.id}</span>
+      </div>}
 
-      <label className="block text-xs text-white/50">{zh ? '提示词' : 'Prompt'}
-        <textarea className={`${field} mt-1 w-full h-28 resize-y`} value={prompt} maxLength={2000} disabled={running}
+      {failed && <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-300">
+        {zh ? '任务未完成，按服务端规则退款；可换个模型或稍后重试。' : 'Task did not complete; refunded per server rules.'}
+      </div>}
+
+      {done && <figure className="rounded-2xl border border-white/10 bg-[#0b0b0d] p-3">
+        <figcaption className="flex items-center justify-between text-[11px] text-white/40 mb-2">
+          <span>{task.id}</span>
+          <a className="text-cyan-300/90 hover:underline" href={fytVideoContentUrl(task.id)} download>{zh ? '下载' : 'Download'}</a>
+        </figcaption>
+        <video className="w-full rounded-xl" controls src={fytVideoContentUrl(task.id)} />
+      </figure>}
+    </div>
+
+    <div className="border-t border-white/5 px-4 py-3 space-y-2">
+      <input className="w-full rounded-2xl border border-white/10 bg-[#151515] px-4 py-2 text-xs text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
+        value={imageUrl} disabled={running} placeholder={zh ? '参考图地址（可选，用于图生视频）' : 'Reference image URL (optional)'}
+        onChange={event => setImageUrl(event.target.value)} />
+      <div className="flex items-end gap-2">
+        <textarea className="flex-1 resize-none rounded-2xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
+          rows={2} maxLength={2000} value={prompt} disabled={running}
           placeholder={zh ? '描述镜头、主体、光线与运动' : 'Describe subject, camera, light and motion'}
           onChange={event => setPrompt(event.target.value)} />
-      </label>
-
-      <label className="block text-xs text-white/50">{zh ? '参考图地址（可选，用于图生视频）' : 'Reference image URL (optional, image-to-video)'}
-        <input className={`${field} mt-1 w-full`} value={imageUrl} disabled={running}
-          placeholder="https://…" onChange={event => setImageUrl(event.target.value)} />
-      </label>
-
-      <div className="flex flex-wrap items-center gap-3">
         <button type="button" disabled={!userId || running || !model || !prompt.trim()} onClick={generate}
-          className="bg-[#22d3ee] text-black px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-40">
-          {running ? (zh ? '生成中…' : 'Generating…') : (zh ? '生成视频' : 'Generate video')}
+          className="rounded-full bg-[#22d3ee] px-5 py-2.5 text-sm font-bold text-black transition-opacity disabled:opacity-40">
+          {running ? (zh ? '生成中…' : 'Generating…') : (zh ? '生成' : 'Generate')}
         </button>
-        {task && <span className="text-xs text-white/50">{zh ? '任务' : 'Task'} {task.id} · {status || 'queued'}</span>}
       </div>
-
-      {error && <p role="alert" className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{error}</p>}
-
-      {done && <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-        <video className="w-full rounded-lg" controls src={fytVideoContentUrl(task.id)} />
-        <a className="inline-block mt-3 text-xs text-cyan-300 underline" href={fytVideoContentUrl(task.id)} download>{zh ? '下载视频' : 'Download video'}</a>
-      </div>}
+      {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
     </div>
   </div>;
 }

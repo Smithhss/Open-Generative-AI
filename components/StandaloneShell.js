@@ -796,8 +796,6 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
         </div>
       )}
 
-      {fytMode && <div className="flex-shrink-0 bg-indigo-600 text-white text-center text-xs py-2 px-4">{locale === 'zh' ? '图片与视频生成已接入 fyt · 文本助手、本地编辑与无限画布可用' : 'Image and video generation connected to fyt · Text, editing and canvas available'}</div>}
-
       {/* Header */}
       {isHeaderVisible && (
         <header className="flex-shrink-0 h-14 border-b border-white/[0.05] flex items-center justify-between px-4 bg-[#0a0a0b]/80 backdrop-blur-md z-50 gap-4">
