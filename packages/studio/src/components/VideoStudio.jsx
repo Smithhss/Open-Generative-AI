@@ -3439,7 +3439,7 @@ export default function VideoStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={previewMode || generating || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={(previewMode && !fytVideo) || generating || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>
