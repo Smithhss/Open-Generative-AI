@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { TEMPLATE_GROUPS, placeholdersIn, templatesFor } from '@/lib/fyt/templates.mjs';
+import { useEffect, useMemo, useState } from 'react';
+import { TEMPLATE_GROUPS, fetchTemplates, placeholdersIn, templatesFor } from '@/lib/fyt/templates.mjs';
 
 // 输入框上方的一排模板：点一下把提示词填进去，用户再改 {{占位符}}。
 // 默认收起，只显示一行，避免抢走输入框的注意力。
@@ -9,7 +9,18 @@ export default function FytTemplateBar({ kind, zh, onPick }) {
   const [open, setOpen] = useState(false);
   const [group, setGroup] = useState('all');
 
-  const all = useMemo(() => templatesFor(kind), [kind]);
+  // 管理员配置过就用配置的，没配置过用内置默认
+  const [custom, setCustom] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTemplates().then(list => { if (!cancelled && list) setCustom(list); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const all = useMemo(() => {
+    const source = custom ? custom.filter(template => template.kind === kind) : templatesFor(kind);
+    return source;
+  }, [custom, kind]);
   const groups = useMemo(
     () => TEMPLATE_GROUPS.filter(item => all.some(template => template.group === item.id)),
     [all],
