@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import '@/lib/fyt/polyfills.mjs';
+import FytTabsAdmin from '@/components/fyt/FytTabsAdmin';
+import { DEFAULT_VISIBLE_TABS, fetchVisibleTabs } from '@/lib/fyt/tabs.mjs';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ImageStudio, VideoStudio, ClippingStudio, MotionControlStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, LayersStudio, getUserBalance } from 'studio';
@@ -335,11 +337,22 @@ const persistNotifications = (notifications) => {
 
 export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const fytMode = Boolean(fyt);
+  const allowedTabs = new Set(visibleTabs ?? DEFAULT_VISIBLE_TABS);
   const navigationCategories = fytMode
     ? NAVIGATION_CATEGORIES
-        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => FYT_VISIBLE_TABS.has(tabId)) }))
+        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => allowedTabs.has(tabId)) }))
         .filter((category) => category.tabIds.length > 0)
     : NAVIGATION_CATEGORIES;
+  // 侧边栏可见入口：管理员在后台改，这里读；没配置时用默认集合
+  const [visibleTabs, setVisibleTabs] = useState(null);
+  const [tabsAdminOpen, setTabsAdminOpen] = useState(false);
+  useEffect(() => {
+    if (!fytMode) return undefined;
+    let cancelled = false;
+    fetchVisibleTabs().then(tabs => { if (!cancelled && tabs) setVisibleTabs(tabs); });
+    return () => { cancelled = true; };
+  }, [fytMode]);
+
   const [imageTransfer, setImageTransfer] = useState(null);
   const [transferPending, setTransferPending] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
@@ -895,6 +908,13 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
+            {fytMode && fyt.isAdmin && <>
+              <button type="button" onClick={() => setTabsAdminOpen(true)}
+                title={locale === 'zh' ? '侧边栏入口开关' : 'Sidebar entries'}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10">⚙</button>
+              <FytTabsAdmin open={tabsAdminOpen} onClose={() => setTabsAdminOpen(false)} token={fyt.accessToken}
+                zh={locale === 'zh'} onSaved={(tabs) => setVisibleTabs(tabs)} />
+            </>}
             {fytMode ? fyt.controls : <>
             <div className="flex items-center gap-2.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />

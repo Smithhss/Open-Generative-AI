@@ -94,6 +94,8 @@ export default function FytShell({ locale = 'en' }) {
     userEmail: session.user?.username || (identity ? `fyt-${identity}` : undefined),
     // 令牌在 state.accessToken（camelCase），不是 session.session.access_token
     accessToken: session.accessToken || null,
+    // 只有管理员能看到侧边栏开关（fyt 里 role >= 10 是管理员）
+    isAdmin: Number(session.user?.role ?? 0) >= 10,
     onGenerationSettled,
     controls: <FytAccountControls key={`${identity}:${session.session?.sid}`} session={session} locale={locale} authError={authError} checkSession={checkSession} balanceRevision={balanceRevision} />,
   }} />;
