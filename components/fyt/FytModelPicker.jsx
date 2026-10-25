@@ -119,7 +119,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
         {/* 顶部是「全部」，对应原版那颗星 */}
         <button type="button" title={zh ? '全部模型' : 'All models'}
           onClick={() => setVendorFilter(null)}
-          className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${vendorFilter === null ? 'bg-white/[0.14] text-white' : 'text-white/45 hover:bg-white/[0.06] hover:text-white/80'}`}>
+          className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${vendorFilter === null ? 'bg-amber-400/15 text-amber-300' : 'text-white/40 hover:bg-white/[0.06] hover:text-amber-200/80'}`}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95L12 2.6z" />
           </svg>
