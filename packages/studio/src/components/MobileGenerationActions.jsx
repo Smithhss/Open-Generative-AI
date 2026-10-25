@@ -1,14 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { imageBlob } from "../utils/imageBlob.js";
 
 async function getClipboardPngBlob(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Image request failed with status ${response.status}.`);
-  }
-
-  const sourceBlob = await response.blob();
+  const sourceBlob = await imageBlob(url);
   if (sourceBlob.type === "image/png") return sourceBlob;
 
   const objectUrl = URL.createObjectURL(sourceBlob);

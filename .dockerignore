@@ -1,0 +1,14 @@
+**/.git
+**/node_modules
+**/.next
+**/dist
+**/dist-ssr
+**/release
+**/.env
+**/.env.*
+**/*.local
+**/*.log
+**/*.pem
+**/credentials.md
+**/fyt-validation.env
+**/.DS_Store

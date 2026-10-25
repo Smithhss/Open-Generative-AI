@@ -1,4 +1,13 @@
 import { NextResponse } from 'next/server';
+import { handleCreativeAgent } from '@/lib/fyt/creative-agent.mjs';
+
+// fyt 模式下这套接口由本仓库实现（会话 + 出图），不再代理到 MuAPI。
+const FYT_MODE = process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt';
+
+async function fytHandler(request, params) {
+  const { path } = await params;
+  return handleCreativeAgent(request, path || []);
+}
 
 const MUAPI_BASE = 'https://api.muapi.ai';
 
@@ -24,6 +33,7 @@ function cleanHeaders(request) {
 }
 
 export async function GET(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
     const slug = await params;
     const pathSegments = slug.path || [];
     const path = pathSegments.join('/');
@@ -48,6 +58,7 @@ export async function GET(request, { params }) {
 }
 
 export async function POST(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
     const slug = await params;
     const pathSegments = slug.path || [];
     const path = pathSegments.join('/');
@@ -72,7 +83,32 @@ export async function POST(request, { params }) {
     }
 }
 
+export async function PUT(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
+    const slug = await params;
+    const pathSegments = slug.path || [];
+    const path = pathSegments.join('/');
+
+    const { search } = new URL(request.url);
+    const targetUrl = `${MUAPI_BASE}/api/v1/creative-agent/${path}${search}`;
+
+    const headers = cleanHeaders(request);
+    const apiKey = getApiKey(request);
+    if (apiKey) headers.set('x-api-key', apiKey);
+
+    try {
+        const body = await request.arrayBuffer();
+        const response = await fetch(targetUrl, { method: 'PUT', headers, body });
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
+    } catch (error) {
+        console.error(`[creative-agent proxy PUT ERROR] ${targetUrl}:`, error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function PATCH(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
     const slug = await params;
     const pathSegments = slug.path || [];
     const path = pathSegments.join('/');
@@ -98,6 +134,7 @@ export async function PATCH(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
     const slug = await params;
     const pathSegments = slug.path || [];
     const path = pathSegments.join('/');

@@ -1,0 +1,23 @@
+# Include inside the existing staging server block. APIs remain owned by Go.
+location = /create {
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver_timeout 2s;
+    set $fyt_studio_backend fyt-studio:3000;
+    proxy_pass http://$fyt_studio_backend;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $fyt_forwarded_proto;
+}
+location ^~ /create/ {
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver_timeout 2s;
+    set $fyt_studio_backend fyt-studio:3000;
+    proxy_pass http://$fyt_studio_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $fyt_forwarded_proto;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_read_timeout 120s;
+    # Next middleware supplies this app's CSP and frame policy.
+    # This avoids inheriting a second frame policy from the console server.
+    add_header X-Content-Type-Options nosniff always;
+}

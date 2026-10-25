@@ -15,6 +15,17 @@ export default function DesignAgentStudio({
   onGenerationEnd,
   onGenerationComplete,
   onGenerationError,
+  // fyt 本地画布：透传给 CreativeCanvas，素材不上传、项目文件本地保存。
+  authToken = null,
+  localCanvas = false,
+  onLocalFiles = null,
+  isLocalSource = null,
+  onLocalClear = null,
+  onProjectDirtyChange = null,
+  canvasApiRef = null,
+  toolbarExtra = null,
+  resolveAsset = null,
+  fytTicket = null,
 }) {
   const [userData, setUserData] = useState(null);
 
@@ -22,13 +33,21 @@ export default function DesignAgentStudio({
   // localStorage before CreativeCanvas's own mount effects read it — passive effects run
   // child-before-parent within a commit, so setting this from *our* useEffect ran after
   // CreativeCanvas's first sessions/agent-skills fetch had already gone out unauthenticated.
-  if (typeof window !== 'undefined' && apiKey) {
-    sessionStorage.setItem("fromDesignAgent", "true");
-    localStorage.setItem("token", apiKey);
+  if (typeof window !== 'undefined') {
+    if (apiKey) {
+      sessionStorage.setItem("fromDesignAgent", "true");
+      localStorage.setItem("token", apiKey);
+    } else if (authToken) {
+      // fyt 模式：画布把 localStorage.token 当 Bearer 发出去，这里放入会话访问令牌。
+      // 只在本组件挂载期间存在，卸载时清掉。
+      localStorage.setItem("token", authToken);
+    }
+    // 既没有 apiKey 也没有 authToken 时不要动这个键：外层（fyt 画布）会自己维护它。
   }
 
   useEffect(() => {
-    if (!apiKey) return;
+    // fyt 模式没有 MuAPI key：只要外层给了用户身份，也要初始化，否则画布会停在未授权态。
+    if (!apiKey && userEmail === undefined && balance === undefined) return;
 
     // White-label shells already know the end user's identity/credit balance (fetched via
     // /api/whitelabel/balance) and pass them in directly — GET /account/balance explicitly
@@ -71,6 +90,15 @@ export default function DesignAgentStudio({
         onGenerationEnd={onGenerationEnd}
         onGenerationComplete={onGenerationComplete}
         onGenerationError={onGenerationError}
+        localCanvas={localCanvas}
+        onLocalFiles={onLocalFiles}
+        isLocalSource={isLocalSource}
+        onLocalClear={onLocalClear}
+        onProjectDirtyChange={onProjectDirtyChange}
+        canvasApiRef={canvasApiRef}
+        toolbarExtra={toolbarExtra}
+        resolveAsset={resolveAsset}
+        fytTicket={fytTicket}
       />
     </div>
   );

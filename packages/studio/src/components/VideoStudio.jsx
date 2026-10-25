@@ -781,11 +781,18 @@ export default function VideoStudio({
   droppedFiles,
   onFilesHandled,
   locale = "en",
+  previewMode = false,
+  persistenceId = null,
+  // fyt 模式：生成走 fyt 网关，参数条换成 fyt 的控件；其余布局与画廊保持原样。
+  fytVideo = null,
 }) {
   const copy = useMemo(() => resolveCopy(en, zh, locale), [locale]);
   const LEGACY_PERSIST_KEY = "hg_video_studio_persistent";
-  const PERSIST_KEY = scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
+  const PERSIST_KEY = previewMode
+    ? (persistenceId ? `fyt:studio:video:v1:${persistenceId}` : null)
+    : scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
   useEffect(() => {
+    if (previewMode) return;
     migrateLegacyPersistKey(LEGACY_PERSIST_KEY, PERSIST_KEY);
   }, [PERSIST_KEY]);
 
@@ -1298,6 +1305,7 @@ export default function VideoStudio({
 
   // ── Persistence: Load ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!PERSIST_KEY) return;
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
       if (stored) {
@@ -1410,6 +1418,7 @@ export default function VideoStudio({
 
   // ── Persistence: Save ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!PERSIST_KEY) return;
     const timer = setTimeout(() => {
       try {
         const state = {
@@ -1583,6 +1592,7 @@ export default function VideoStudio({
 
   const uploadFiles = useCallback(
     async (files, { label, maxBytes, setUploading, setProgress }) => {
+      if (previewMode) return [];
       const selectedFiles = Array.from(files);
       const tooLarge = selectedFiles.find((file) => file.size > maxBytes);
       if (tooLarge) {
@@ -1625,7 +1635,7 @@ export default function VideoStudio({
         setProgress(0);
       }
     },
-    [apiKey, copy.errors.labelExceedsLimit, copy.errors.labelUploadFailed],
+    [apiKey, previewMode, copy.errors.labelExceedsLimit, copy.errors.labelUploadFailed],
   );
 
   const uploadWorkflowSlotFiles = useCallback(
@@ -1860,6 +1870,7 @@ export default function VideoStudio({
 
   // ── end-frame upload (FLF i2v models) ──────────────────────────────────────
   const handleEndImageFileChange = async (e) => {
+    if (previewMode) return;
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -2080,6 +2091,30 @@ export default function VideoStudio({
 
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
+    if (fytVideo) {
+      if (!fytVideo.enabled || generating) return;
+      setGenerating(true);
+      try {
+        const result = await fytVideo.generate({ prompt: prompt.trim() });
+        if (result?.url) {
+          const entry = {
+            id: result.id || `fyt-${Date.now()}`,
+            url: result.url,
+            prompt: prompt.trim(),
+            model: result.model || "fyt",
+            createdAt: Date.now(),
+          };
+          addToLocalHistory(entry);
+          showVideoInCanvas(entry.url, entry.model);
+        }
+      } catch (error) {
+        fytVideo.onError?.(error);
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+    if (previewMode) return;
     if (mediaUploading || workflowUploadSlotRef.current) {
       toast.error(copy.errors.waitForCurrentUpload);
       return;
@@ -2325,6 +2360,10 @@ export default function VideoStudio({
     }
   }, [
     apiKey,
+    previewMode,
+    fytVideo,
+    addToLocalHistory,
+    showVideoInCanvas,
     copy,
     prompt,
     promptDisabled,
@@ -2677,6 +2716,8 @@ export default function VideoStudio({
 
       {/* ── BOTTOM PROMPT BAR ── */}
       <PromptComposer>
+          {/* fyt：模板入口（由外层注入，未注入时不渲染） */}
+          {fytVideo?.renderTemplates && fytVideo.renderTemplates({ onPick: (text) => setPrompt(text) })}
           <div className="flex flex-col gap-3">
             {/* Inline list of uploaded media files */}
             <div className="flex items-start gap-2.5 flex-wrap">
@@ -2942,6 +2983,7 @@ export default function VideoStudio({
           {/* Bottom row: controls + generate */}
           <PromptFooter>
             <PromptControls ref={dropdownRef}>
+              {fytVideo ? fytVideo.controls : <>
               {/* Model btn */}
               <div className="relative">
                 <button
@@ -3376,6 +3418,7 @@ export default function VideoStudio({
                   type="button"
                   className={promptControlClassName()}
                   onClick={() => setIsDrawModalOpen(true)}
+                  disabled={previewMode}
                 >
                   <svg
                     width="16"
@@ -3392,12 +3435,13 @@ export default function VideoStudio({
                   <span className={PROMPT_CONTROL_LABEL_CLASS}>{copy.controls.draw}</span>
                 </button>
               )}
+              </>}
             </PromptControls>
 
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={(previewMode && !fytVideo) || generating || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>
@@ -3408,7 +3452,7 @@ export default function VideoStudio({
                 </>
               ) : (
                 <>
-                  <span>{copy.controls.generate}</span>
+                  <span>{fytVideo ? copy.controls.generate : previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.controls.generate}</span>
                 </>
               )}
             </PromptAction>

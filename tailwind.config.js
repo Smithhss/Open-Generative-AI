@@ -12,6 +12,9 @@ module.exports = {
     ],
     theme: {
         extend: {
+            // Match the original studio package's empty-state card dimensions.
+            width: { 18: '4.5rem' },
+            height: { 18: '4.5rem', 22: '5.5rem' },
             colors: {
                 primary: {
                     DEFAULT: '#22d3ee',

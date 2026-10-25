@@ -1,0 +1,42 @@
+.shell { min-height:100vh; background:#0e141d; color:#e4eaf3; font-family:var(--font-inter),-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.shell a { color:inherit; text-decoration:none; }
+.header { height:84px; display:flex; align-items:center; justify-content:space-between; padding:0 5vw; border-bottom:1px solid #2b3544; }
+.brand { font-weight:800; font-size:30px; letter-spacing:-1.5px; }
+.brand span { margin-left:18px; font-size:14px; font-weight:400; letter-spacing:0; color:#a2b0c4; }
+.header nav { display:flex; gap:24px; font-size:13px; }
+.content { max-width:1280px; margin:auto; padding:0 40px 64px; }
+.tabs { display:flex; gap:36px; align-items:center; min-height:70px; border-bottom:1px solid #2b3544; font-size:14px; color:#a2b0c4; }
+.tabs > span:first-child { color:#9cd4f7; padding:24px 0; border-bottom:2px solid #9cd4f7; }
+.tabs small { font-size:10px; margin-left:8px; color:#8d9db3; border:1px solid #384354; border-radius:4px; padding:3px 5px; }
+.intro { padding:48px 0 32px; }
+.eyebrow { color:#9cd4f7; font-size:11px; letter-spacing:3px; margin-bottom:16px; }
+.intro h1 { font-size:clamp(28px,4vw,44px); font-weight:500; letter-spacing:-1px; line-height:1.35; margin-bottom:12px; }
+.intro > p:last-child,.muted { font-size:13px; color:#a2b0c4; line-height:1.8; }
+.shell button { background:#9cd4f7; border:1px solid transparent; border-radius:7px; padding:10px 16px; color:#102133; font:inherit; font-size:13px; cursor:pointer; }
+.shell button:disabled { opacity:.5; cursor:wait; }
+.shell button:focus-visible,.shell a:focus-visible,.shell textarea:focus-visible { outline:2px solid #9cd4f7; outline-offset:4px; }
+.account { display:flex; justify-content:space-between; align-items:center; padding:22px 26px; background:#172130; border:1px solid #2b3544; border-radius:12px; margin-bottom:24px; }
+.balance { font-variant-numeric:tabular-nums; font-size:30px; margin:8px 0; }
+.accountActions { display:flex; gap:10px; }
+.accountActions button:last-child { background:transparent; color:#a2b0c4; border-color:#384354; }
+.workspace { display:grid; grid-template-columns:minmax(280px,420px) 1fr; border:1px solid #2b3544; border-radius:12px; overflow:hidden; }
+.editor { padding:28px; background:#172130; }
+.editor label { display:block; font-size:14px; margin-bottom:14px; }
+.editor textarea { width:100%; min-height:235px; resize:vertical; padding:16px; border:1px solid #384354; border-radius:8px; background:#101925; color:#e4eaf3; font:inherit; font-size:14px; line-height:1.8; }
+.editor textarea::placeholder { color:#8d9db3; }
+.draftActions { display:flex; justify-content:space-between; align-items:center; margin:14px 0; }
+.draftActions > span { font-size:11px; color:#a2b0c4; font-variant-numeric:tabular-nums; }
+.availability { padding:18px 0 0; margin-top:22px; border-top:1px solid #384354; font-size:13px; color:#a2b0c4; line-height:1.8; }
+.availability strong { color:#e4eaf3; font-weight:500; }
+.availability p { margin-top:8px; }
+.notice { font-size:12px; min-height:20px; color:#9cd4f7; }
+.error { margin-bottom:20px; color:#ffb7aa; font-size:13px; }
+.canvas { min-height:500px; display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; padding:30px; background:radial-gradient(ellipse at center,#1b2b40 0%,#0e141d 70%); }
+.canvas h2 { font-size:18px; font-weight:500; margin:28px 0 12px; }
+.canvas p { color:#a2b0c4; font-size:13px; line-height:1.8; }
+.frame { width:150px; height:180px; border:1px solid #607793; padding:12px; transform:rotate(-6deg); }
+.frame span { display:block; width:100%; height:100%; border:1px dashed #607793; }
+.signIn { padding:64px 28px; background:#172130; border:1px solid #2b3544; border-radius:12px; text-align:center; }
+.signIn h2 { font-weight:500; font-size:22px; }
+.signIn > p { margin:16px 0 28px; font-size:14px; color:#a2b0c4; }
+@media(max-width:700px) { .header { padding:0 20px; height:72px; } .brand span { display:none; } .header nav { gap:16px; } .content { padding:0 20px 40px; } .workspace { grid-template-columns:1fr; } .canvas { min-height:340px; } .account { padding:18px; align-items:flex-start; gap:20px; } .accountActions { flex-direction:column; } .intro { padding-top:32px; } }
