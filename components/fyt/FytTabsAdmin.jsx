@@ -72,8 +72,8 @@ export default function FytTabsAdmin({ open, onClose, token, zh, onSaved }) {
     }
   }
 
-  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-    <div className={`w-full ${tab === 'tabs' ? 'max-w-md' : 'max-w-2xl'} rounded-2xl border border-white/10 bg-[#0b0b0d] p-5 transition-all`}>
+  return <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/70 p-4" role="dialog" aria-modal="true">
+    <div className={`thin-scrollbar my-auto max-h-[88vh] w-full overflow-y-auto ${tab === 'tabs' ? 'max-w-md' : 'max-w-2xl'} rounded-2xl border border-white/10 bg-[#0b0b0d] p-5 transition-all`}>
       <div className="flex items-center justify-between">
         <div className="flex gap-1 rounded-full bg-white/[0.04] p-0.5">
           {[{ id: 'tabs', label: zh ? '侧边栏' : 'Sidebar' }, { id: 'templates', label: zh ? '提示词模板' : 'Templates' }].map(item => (
