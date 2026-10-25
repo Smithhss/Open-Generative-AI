@@ -2716,6 +2716,8 @@ export default function VideoStudio({
 
       {/* ── BOTTOM PROMPT BAR ── */}
       <PromptComposer>
+          {/* fyt：模板入口（由外层注入，未注入时不渲染） */}
+          {fytVideo?.renderTemplates && fytVideo.renderTemplates({ onPick: (text) => setPrompt(text) })}
           <div className="flex flex-col gap-3">
             {/* Inline list of uploaded media files */}
             <div className="flex items-start gap-2.5 flex-wrap">

@@ -1677,6 +1677,8 @@ export default function ImageStudio({
       {/* ── BOTTOM PROMPT BAR ── */}
       <PromptComposer>
           {generateError && <p role="alert" className="text-xs text-red-300 mb-2">{generateError}</p>}
+          {/* fyt：模板入口（由外层注入，未注入时不渲染） */}
+          {fytImage?.renderTemplates && fytImage.renderTemplates({ onPick: (text) => setPrompt(text) })}
           {/* Top row: upload picker + textarea */}
           <div className="flex flex-col gap-3">
             {/* Inline list of uploaded files */}

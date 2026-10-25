@@ -5,6 +5,7 @@ import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import { getImageModels, generateFytImage, generateFytImageEdit } from '@/lib/fyt/images.mjs';
 import FytModelPicker from '@/components/fyt/FytModelPicker';
+import FytTemplateBar from '@/components/fyt/FytTemplateBar';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
   const zh = locale === 'zh';
@@ -92,6 +93,8 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     <ImageStudio locale={locale} previewMode persistenceId={userId}
       fytImage={{
         enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running),
+        // 输入框上方的模板入口
+        renderTemplates: ({ onPick }) => <FytTemplateBar kind="image" zh={zh} onPick={onPick} />,
         generate,
         generateEdit,
         supportsEdit: true,

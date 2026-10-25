@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { VideoStudio } from 'studio';
 import { authenticatedScope, getChatGroups } from '@/lib/fyt/chat.mjs';
 import FytModelPicker from '@/components/fyt/FytModelPicker';
+import FytTemplateBar from '@/components/fyt/FytTemplateBar';
 import {
   VIDEO_DURATIONS,
   VIDEO_SIZES,
@@ -179,6 +180,8 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
   return <VideoStudio locale={locale} previewMode persistenceId={userId}
     fytVideo={{
       enabled: Boolean(userId && group && model && models.length && !running),
+      // 输入框上方的模板入口
+      renderTemplates: ({ onPick }) => <FytTemplateBar kind="video" zh={zh} onPick={onPick} />,
       controls,
       generate,
       onError: cause => setError(copy(cause?.message)),
