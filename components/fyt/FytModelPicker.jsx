@@ -112,7 +112,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
     </button>
 
     {open && <div
-      className="absolute bottom-full left-0 z-50 mb-2 flex h-[490px] w-[372px] overflow-hidden rounded-2xl border border-white/10 bg-[#161616] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
+      className="absolute bottom-full left-0 z-50 mb-2 flex max-h-[490px] w-[372px] overflow-hidden rounded-2xl border border-white/10 bg-[#161616] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
       role="dialog" aria-label={zh ? '选择模型' : 'Select model'}>
       {/* 左侧厂商栏 */}
       <div className="flex w-[58px] shrink-0 flex-col items-center overflow-y-auto border-r border-white/[0.06] bg-[#111111] py-3">
