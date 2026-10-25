@@ -151,3 +151,10 @@ test('local image references require the original file and never downgrade stale
   assert.throws(() => resolveLocalReference(['blob:stale-reference'], files), /INVALID_REFERENCE_IMAGE/);
   assert.throws(() => resolveLocalReference(['blob:valid-reference', 'blob:stale-reference'], files), /INVALID_REFERENCE_IMAGE/);
 });
+
+test('image edits carry the selected normalized size instead of silently using auto size', () => {
+  const file = new File(['fixture'], 'reference.png', { type: 'image/png' });
+  const parameters = { model: 'gpt-image-2', group: 'default', prompt: 'edit', file };
+  assert.equal(imageEditFormData({ ...parameters, size: '1024X1024' }).get('size'), '1024x1024');
+  assert.equal(imageEditFormData(parameters).get('size'), null);
+});

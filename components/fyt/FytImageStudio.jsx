@@ -68,7 +68,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   async function generateEdit({ prompt, file }) {
     if (run.current || !model || modelGroup !== group || !group || !userId) throw new Error('INVALID_IMAGE_REQUEST');
     const controller = new AbortController(); run.current = controller; setRunning(true);
-    try { return await generateFytImageEdit({ model, group, prompt, file }, { signal: controller.signal }); }
+    try { return await generateFytImageEdit({ model, group, prompt, file, size: activeSize || undefined }, { signal: controller.signal }); }
     finally { run.current = null; setRunning(false); if (!controller.signal.aborted) onSettled?.(); }
   }
 
