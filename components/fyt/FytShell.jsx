@@ -61,6 +61,21 @@ function FytAccountControls({ session, locale, authError, checkSession, balanceR
 // 子域部署时为空，老的 /create 路径部署时是 '/create'
 const BASE = process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || '';
 
+// 会话里的 user 不含 role，单独查一次；只有管理员能看到侧边栏开关
+function useIsAdmin(accessToken) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    if (!accessToken) { setIsAdmin(false); return undefined; }
+    let cancelled = false;
+    fetch('/api/user/self', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })
+      .then(response => response.json())
+      .then(body => { if (!cancelled) setIsAdmin(Number(body?.data?.role ?? 0) >= 10); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
+  return isAdmin;
+}
+
 export default function FytShell({ locale = 'en' }) {
   const session = useSyncExternalStore(subscribeSession, getSessionState, getServerSessionState);
   const [authError, setAuthError] = useState(false);
@@ -89,13 +104,14 @@ export default function FytShell({ locale = 'en' }) {
   // Never pass the access token to the upstream shell's API-key prop. Remount on
   // identity changes so prompts and media cannot survive a switch of account.
   const identity = session.status === 'authenticated' ? session.user?.id : null;
+  const isAdmin = useIsAdmin(session.accessToken);
   return <StandaloneShell key={identity || 'anonymous'} locale={locale} fyt={{
     userId: identity,
     userEmail: session.user?.username || (identity ? `fyt-${identity}` : undefined),
     // 令牌在 state.accessToken（camelCase），不是 session.session.access_token
     accessToken: session.accessToken || null,
     // 只有管理员能看到侧边栏开关（fyt 里 role >= 10 是管理员）
-    isAdmin: Number(session.user?.role ?? 0) >= 10,
+    isAdmin,
     onGenerationSettled,
     controls: <FytAccountControls key={`${identity}:${session.session?.sid}`} session={session} locale={locale} authError={authError} checkSession={checkSession} balanceRevision={balanceRevision} />,
   }} />;
