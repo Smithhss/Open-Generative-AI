@@ -21,12 +21,14 @@ const VENDOR_CODE = {
   fyt: 'FY',
 };
 
+// 原版是单色图标 + 深色方块，这里保持中性，不做品牌配色
 const VENDOR_TONE = {
-  OpenAI: 'from-emerald-400/25 to-emerald-500/10 text-emerald-200',
-  Google: 'from-sky-400/25 to-sky-500/10 text-sky-200',
-  ByteDance: 'from-fuchsia-400/25 to-fuchsia-500/10 text-fuchsia-200',
-  fyt: 'from-white/15 to-white/5 text-white/70',
+  OpenAI: 'from-white/[0.14] to-white/[0.05] text-white/85',
+  Google: 'from-white/[0.14] to-white/[0.05] text-white/85',
+  ByteDance: 'from-white/[0.14] to-white/[0.05] text-white/85',
+  fyt: 'from-white/[0.14] to-white/[0.05] text-white/70',
 };
+const NEUTRAL_TONE = 'from-white/[0.12] to-white/[0.04] text-white/80';
 
 // 有 logo 的厂商画 logo，没有的退回首字母
 function BrandIcon({ vendor, size = 14, className = '' }) {
@@ -118,7 +120,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
           <span className="text-[8px] font-semibold tracking-[0.14em] text-white/25">{VENDOR_CODE[vendor] || vendor.slice(0, 2).toUpperCase()}</span>
           <button type="button" title={vendor}
             onClick={() => setVendorFilter(previous => (previous === vendor ? null : vendor))}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br transition-all ${VENDOR_TONE[vendor] || 'from-white/10 to-white/[0.03] text-white/60'} ${vendorFilter === vendor ? 'ring-1 ring-cyan-300/60' : 'hover:brightness-125'}`}>
+            className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br transition-all ${VENDOR_TONE[vendor] || NEUTRAL_TONE} ${vendorFilter === vendor ? 'ring-1 ring-cyan-300/60' : 'hover:brightness-125'}`}>
             <BrandIcon vendor={vendor} size={16} />
           </button>
         </div>)}
