@@ -908,7 +908,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
-            {fytMode && fyt.isAdmin && <>
+            {fytMode && <>
               <button type="button" onClick={() => setTabsAdminOpen(true)}
                 title={locale === 'zh' ? '侧边栏入口开关' : 'Sidebar entries'}
                 className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10">⚙</button>

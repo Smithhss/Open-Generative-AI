@@ -73,7 +73,7 @@ function useIsAdmin(ready) {
         if (!token) return null;
         return fetch('/api/user/self', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }).then(r => r.json());
       })
-      .then(body => { console.info('[isAdmin]', Boolean(body), body?.data?.role); if (!cancelled) setIsAdmin(Number(body?.data?.role ?? 0) >= 10); })
+      .then(body => { if (!cancelled) setIsAdmin(Number(body?.data?.role ?? 0) >= 10); })
       .catch(() => { if (!cancelled) setIsAdmin(false); });
     return () => { cancelled = true; };
   }, [ready]);

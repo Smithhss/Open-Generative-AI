@@ -36,7 +36,11 @@ export default function FytTabsAdmin({ open, onClose, token, zh, onSaved }) {
       setMessage(zh ? '已保存，刷新后生效。' : 'Saved. Reload to apply.');
       onSaved?.(ordered);
     } catch (error) {
-      setMessage(`${zh ? '保存失败：' : 'Save failed: '}${error?.message || ''}`);
+      const raw = error?.message || '';
+      const friendly = /401|403|unauthorized|forbidden/i.test(raw)
+        ? (zh ? '需要管理员权限才能修改。' : 'Admin permission required.')
+        : raw;
+      setMessage(`${zh ? '保存失败：' : 'Save failed: '}${friendly}`);
     } finally {
       setSaving(false);
     }
