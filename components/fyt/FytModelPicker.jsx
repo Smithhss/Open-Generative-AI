@@ -3,19 +3,47 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { labelForModel, vendorForModel } from '@/lib/fyt/model-alias.mjs';
 
-// 外观照原版模型选择器：搜索框 + 全部/文生图/图生图 三个分类 + 带厂商的模型行。
-// 数据来自 fyt 的模型目录，不依赖上游那份静态清单。
+// 外观对齐原版模型选择器：顶部 MODEL 标题、左侧厂商图标栏（带两字代码）、
+// 右侧分类 + 搜索 + 按厂商分组的模型列表，选中项右侧打勾。
+// 数据仍来自 fyt 的模型目录，不依赖上游那份静态清单。
+const VENDOR_CODE = {
+  OpenAI: 'OP',
+  Google: 'GO',
+  ByteDance: 'BY',
+  'Black Forest': 'BF',
+  Kuaishou: 'KS',
+  Ideogram: 'ID',
+  MiniMax: 'MM',
+  Alibaba: 'AL',
+  DeepSeek: 'DS',
+  Anthropic: 'AN',
+  fyt: 'FY',
+};
+
+const VENDOR_TONE = {
+  OpenAI: 'from-emerald-400/25 to-emerald-500/10 text-emerald-200',
+  Google: 'from-sky-400/25 to-sky-500/10 text-sky-200',
+  ByteDance: 'from-fuchsia-400/25 to-fuchsia-500/10 text-fuchsia-200',
+  fyt: 'from-white/15 to-white/5 text-white/70',
+};
+
 export default function FytModelPicker({ models, capabilities, value, onChange, disabled, zh }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
+  const [vendorFilter, setVendorFilter] = useState(null);
   const box = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
     const onDocClick = event => { if (box.current && !box.current.contains(event.target)) setOpen(false); };
+    const onKey = event => { if (event.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   const items = useMemo(() => models.map(id => ({
@@ -23,15 +51,32 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
     label: labelForModel(id),
     vendor: vendorForModel(id),
     sizes: capabilities?.[id]?.sizes || [],
+    editable: Boolean(capabilities?.[id]?.supportsEdit),
   })), [models, capabilities]);
 
+  const vendors = useMemo(() => {
+    const seen = [];
+    for (const item of items) if (!seen.includes(item.vendor)) seen.push(item.vendor);
+    return seen;
+  }, [items]);
+
   const visible = items.filter(item => {
+    if (vendorFilter && item.vendor !== vendorFilter) return false;
     if (tab === 't2i' && item.sizes.length === 0) return false;
-    if (tab === 'i2i' && !capabilities?.[item.id]?.supportsEdit) return false;
-    if (!search.trim()) return true;
+    if (tab === 'i2i' && !item.editable) return false;
     const query = search.trim().toLowerCase();
-    return item.id.toLowerCase().includes(query) || item.label.toLowerCase().includes(query);
+    if (!query) return true;
+    return item.id.toLowerCase().includes(query) || item.label.toLowerCase().includes(query) || item.vendor.toLowerCase().includes(query);
   });
+
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const item of visible) {
+      if (!map.has(item.vendor)) map.set(item.vendor, []);
+      map.get(item.vendor).push(item);
+    }
+    return [...map.entries()];
+  }, [visible]);
 
   const current = items.find(item => item.id === value);
   const tabs = [
@@ -40,44 +85,88 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
     { id: 'i2i', label: zh ? '图生图' : 'Image to Image' },
   ];
 
+  const close = () => { setOpen(false); setSearch(''); setVendorFilter(null); };
+
   return <div className="relative" ref={box}>
-    <button type="button" disabled={disabled} onClick={() => setOpen(v => !v)}
-      className="flex items-center gap-2 rounded-full border border-white/10 bg-[#151515] px-3 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40">
-      <span className="w-4 h-4 rounded bg-white/10 flex items-center justify-center text-[9px] text-white/70">
+    <button type="button" disabled={disabled} onClick={() => (open ? close() : setOpen(true))}
+      className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#161616] px-2.5 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-white/15 to-white/5 text-[9px] font-semibold text-white/80">
         {(current?.vendor || 'f')[0].toUpperCase()}
       </span>
       <span className="max-w-[180px] truncate">{current?.label || (zh ? '选择模型' : 'Select model')}</span>
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-50">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40">
         <path d="M6 9l6 6 6-6" />
       </svg>
     </button>
 
-    {open && <div className="absolute bottom-full left-0 mb-2 w-[320px] max-h-[420px] overflow-hidden rounded-xl border border-white/10 bg-[#111214] shadow-2xl z-50 flex flex-col">
-      <div className="flex gap-1 p-2 border-b border-white/5">
-        {tabs.map(item => <button key={item.id} type="button" onClick={() => setTab(item.id)}
-          className={`flex-1 rounded-md px-2 py-1 text-[11px] transition-colors ${tab === item.id ? 'bg-cyan-400/15 text-cyan-200' : 'text-white/50 hover:text-white/80'}`}>
-          {item.label}
-        </button>)}
+    {open && <div
+      className="absolute bottom-full left-0 z-50 mb-2 flex w-[380px] overflow-hidden rounded-2xl border border-white/10 bg-[#161616] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
+      role="dialog" aria-label={zh ? '选择模型' : 'Select model'}>
+      {/* 左侧厂商栏 */}
+      <div className="flex w-[58px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-white/[0.06] bg-[#111111] py-3">
+        {vendors.map(vendor => <div key={vendor} className="flex w-full flex-col items-center gap-1">
+          <span className="text-[8px] font-semibold tracking-[0.14em] text-white/25">{VENDOR_CODE[vendor] || vendor.slice(0, 2).toUpperCase()}</span>
+          <button type="button" title={vendor}
+            onClick={() => setVendorFilter(previous => (previous === vendor ? null : vendor))}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br text-[11px] font-semibold transition-all ${VENDOR_TONE[vendor] || 'from-white/10 to-white/[0.03] text-white/60'} ${vendorFilter === vendor ? 'ring-1 ring-cyan-300/60' : 'hover:brightness-125'}`}>
+            {vendor[0].toUpperCase()}
+          </button>
+        </div>)}
       </div>
-      <div className="p-2 border-b border-white/5">
-        <input value={search} onChange={event => setSearch(event.target.value)} autoFocus
-          placeholder={zh ? '搜索模型…' : 'Search models…'}
-          className="w-full rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-[11px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none" />
-      </div>
-      <div className="flex-1 overflow-y-auto p-1">
-        {!visible.length && <p className="px-2 py-4 text-center text-[11px] text-white/30">{zh ? '没有匹配的模型' : 'No models match'}</p>}
-        {visible.map(item => <button key={item.id} type="button"
-          onClick={() => { onChange(item.id); setOpen(false); setSearch(''); }}
-          className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/5">
-          <span className="w-6 h-6 shrink-0 rounded bg-white/10 flex items-center justify-center text-[10px] text-white/70">
-            {item.vendor[0].toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[12px] text-white/90">{item.label}</span>
-            <span className="block truncate text-[10px] text-white/35">{item.vendor}</span>
-          </span>
-          {item.id === value && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-cyan-300 shrink-0"><path d="M20 6L9 17l-5-5" /></svg>}
-        </button>)}
+
+      {/* 右侧内容 */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between px-4 pb-2 pt-3">
+          <span className="text-[10px] font-semibold tracking-[0.16em] text-white/35">MODEL</span>
+          <button type="button" onClick={close} aria-label={zh ? '关闭' : 'Close'} className="text-white/30 transition-colors hover:text-white/70">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div className="flex gap-1.5 px-4 pb-3">
+          {tabs.map(item => <button key={item.id} type="button" onClick={() => setTab(item.id)}
+            className={`rounded-full px-2.5 py-1 text-[10.5px] transition-colors ${tab === item.id
+              ? 'bg-white/[0.07] text-white/90 ring-1 ring-white/15'
+              : 'text-white/40 hover:text-white/70'}`}>
+            {item.label}
+          </button>)}
+        </div>
+
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/40 px-2.5 py-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-white/30">
+              <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+            </svg>
+            <input value={search} onChange={event => setSearch(event.target.value)} autoFocus
+              placeholder={zh ? '搜索模型…' : 'Search models...'}
+              className="w-full bg-transparent text-[11.5px] text-white placeholder:text-white/25 focus:outline-none" />
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+          <p className="px-4 pb-1 text-[10px] text-white/30">{zh ? '全部模型' : 'All models'}</p>
+          {!visible.length && <p className="px-4 py-6 text-center text-[11px] text-white/25">{zh ? '没有匹配的模型' : 'No models match'}</p>}
+          {grouped.map(([vendor, list]) => <div key={vendor}>
+            <div className="flex items-center gap-1.5 px-4 py-1.5">
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded bg-white/10 text-[7px] font-semibold text-white/60">{vendor[0].toUpperCase()}</span>
+              <span className="text-[10.5px] text-white/45">{vendor}</span>
+            </div>
+            <div className="px-2">
+              {list.map(item => <button key={item.id} type="button"
+                onClick={() => { onChange(item.id); close(); }}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${item.id === value ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-white/12 to-white/[0.04] text-[10px] font-semibold text-white/70">
+                  {vendor[0].toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] text-white/90">{item.label}</span>
+                  <span className="block truncate text-[10px] text-white/35">{vendor}</span>
+                </span>
+                {item.id === value && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 text-cyan-300"><path d="M20 6L9 17l-5-5" /></svg>}
+              </button>)}
+            </div>
+          </div>)}
+        </div>
       </div>
     </div>}
   </div>;
