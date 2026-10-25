@@ -115,14 +115,24 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
       className="absolute bottom-full left-0 z-50 mb-2 flex h-[490px] w-[372px] overflow-hidden rounded-2xl border border-white/10 bg-[#161616] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
       role="dialog" aria-label={zh ? '选择模型' : 'Select model'}>
       {/* 左侧厂商栏 */}
-      <div className="flex w-[58px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-white/[0.06] bg-[#111111] py-3">
-        {vendors.map(vendor => <div key={vendor} className="flex w-full flex-col items-center gap-1">
-          <span className="text-[8px] font-semibold tracking-[0.14em] text-white/25">{VENDOR_CODE[vendor] || vendor.slice(0, 2).toUpperCase()}</span>
+      <div className="flex w-[58px] shrink-0 flex-col items-center overflow-y-auto border-r border-white/[0.06] bg-[#111111] py-3">
+        {/* 顶部是「全部」，对应原版那颗星 */}
+        <button type="button" title={zh ? '全部模型' : 'All models'}
+          onClick={() => setVendorFilter(null)}
+          className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${vendorFilter === null ? 'bg-white/[0.14] text-white' : 'text-white/45 hover:bg-white/[0.06] hover:text-white/80'}`}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95L12 2.6z" />
+          </svg>
+        </button>
+        <span className="my-2 h-px w-6 bg-white/[0.08]" />
+        {vendors.map((vendor, index) => <div key={vendor} className="flex w-full flex-col items-center">
+          {index > 0 && <span className="mb-1.5 mt-0.5 h-px w-6 bg-white/[0.05]" />}
           <button type="button" title={vendor}
             onClick={() => setVendorFilter(previous => (previous === vendor ? null : vendor))}
             className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br transition-all ${VENDOR_TONE[vendor] || NEUTRAL_TONE} ${vendorFilter === vendor ? 'ring-1 ring-cyan-300/60' : 'hover:brightness-125'}`}>
             <BrandIcon vendor={vendor} size={16} />
           </button>
+          <span className="mt-1 text-[8px] font-semibold tracking-[0.12em] text-white/25">{VENDOR_CODE[vendor] || vendor.slice(0, 2).toUpperCase()}</span>
         </div>)}
       </div>
 
@@ -155,7 +165,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+        <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto pb-3">
           <p className="px-4 pb-1 text-[10px] text-white/30">{zh ? '全部模型' : 'All models'}</p>
           {!visible.length && <p className="px-4 py-6 text-center text-[11px] text-white/25">{zh ? '没有匹配的模型' : 'No models match'}</p>}
           {grouped.map(([vendor, list]) => <div key={vendor}>
@@ -166,7 +176,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
             <div className="px-2">
               {list.map(item => <button key={item.id} type="button"
                 onClick={() => { onChange(item.id); close(); }}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left transition-colors ${item.id === value ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
+                className={`flex min-h-[50px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${item.id === value ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'}`}>
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-white/12 to-white/[0.04] text-white/75">
                   <BrandIcon vendor={vendor} size={13} />
                 </span>
