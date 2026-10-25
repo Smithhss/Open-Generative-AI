@@ -83,6 +83,30 @@ export async function POST(request, { params }) {
     }
 }
 
+export async function PUT(request, { params }) {
+    if (FYT_MODE) return fytHandler(request, params);
+    const slug = await params;
+    const pathSegments = slug.path || [];
+    const path = pathSegments.join('/');
+
+    const { search } = new URL(request.url);
+    const targetUrl = `${MUAPI_BASE}/api/v1/creative-agent/${path}${search}`;
+
+    const headers = cleanHeaders(request);
+    const apiKey = getApiKey(request);
+    if (apiKey) headers.set('x-api-key', apiKey);
+
+    try {
+        const body = await request.arrayBuffer();
+        const response = await fetch(targetUrl, { method: 'PUT', headers, body });
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
+    } catch (error) {
+        console.error(`[creative-agent proxy PUT ERROR] ${targetUrl}:`, error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function PATCH(request, { params }) {
     if (FYT_MODE) return fytHandler(request, params);
     const slug = await params;
