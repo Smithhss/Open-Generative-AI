@@ -25,6 +25,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     const code = error?.message || '';
     console.warn('[fyt-image] 生成失败:', code);
     const message = code === 'AUTH_REQUIRED' ? (zh ? '请先登录 fyt。' : 'Sign in with fyt first.')
+      : code === 'INVALID_REFERENCE_IMAGE' ? (zh ? '参考图已失效，请重新上传。本次未提交生成。' : 'Reference expired. Upload it again. No generation was submitted.')
       : code === 'IMAGE_BASE64_REQUIRED' ? (zh ? '上游未返回可直接显示的图片数据，请凭请求编号检查日志，勿重复点击生成。' : 'No inline image returned. Check the request log before generating again.')
       : (zh ? '请求未完成，请检查额度、渠道或日志。系统未自动重发；中断不代表未扣费。' : 'Request incomplete. Check balance, channel and logs. No automatic retry; interruption does not imply no charge.');
     return error?.requestId ? `${message} Request ID: ${error.requestId}` : message;

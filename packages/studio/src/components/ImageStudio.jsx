@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
+import { resolveLocalReference } from "../localImage.js";
 import { imageBlob } from "../utils/imageBlob.js";
 import { getImageDownloadFilename } from "../utils/downloadImage.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -1109,8 +1110,8 @@ export default function ImageStudio({
         if (data.selectedQuality) setSelectedQuality(data.selectedQuality);
         if (data.selectedEffect) setSelectedEffect(data.selectedEffect);
         if (data.prompt) setPrompt(data.prompt);
-        if (data.uploadedImageUrls) setUploadedImageUrls(data.uploadedImageUrls);
-        if (data.uploadHistory) setUploadHistory(data.uploadHistory);
+        if (!fytImage && data.uploadedImageUrls) setUploadedImageUrls(data.uploadedImageUrls);
+        if (!fytImage && data.uploadHistory) setUploadHistory(data.uploadHistory);
         if (data.batchSize) setBatchSize(data.batchSize);
         if (data.localHistory && !fytImage) setLocalHistory(data.localHistory);
       }
@@ -1134,8 +1135,8 @@ export default function ImageStudio({
           selectedEffect,
           modelParameterValues,
           prompt,
-          uploadedImageUrls,
-          uploadHistory,
+          uploadedImageUrls: fytImage ? [] : uploadedImageUrls,
+          uploadHistory: fytImage ? [] : uploadHistory,
           batchSize,
           localHistory: fytImage ? [] : localHistory,
         };
@@ -1412,7 +1413,7 @@ export default function ImageStudio({
       if (generating || !fytImage.enabled || !prompt.trim()) return;
       setGenerating(true); setGenerateError(null);
       try {
-        const localFile = uploadedImageUrls.map((url) => fytLocalFiles.current.get(url)).find(Boolean);
+        const localFile = resolveLocalReference(uploadedImageUrls, fytLocalFiles.current);
         const result = localFile && fytImage.generateEdit
           ? await fytImage.generateEdit({ prompt: prompt.trim(), file: localFile })
           : await fytImage.generate(prompt);

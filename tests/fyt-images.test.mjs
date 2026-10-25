@@ -140,3 +140,14 @@ test('capabilities are trimmed to the models the group actually returned', () =>
   assert.deepEqual(pickCapabilities(null, ['a']), {});
   assert.deepEqual(pickCapabilities(raw, null), {});
 });
+
+// Losing a browser File after navigation must not silently produce a paid text-to-image request.
+test('local image references require the original file and never downgrade stale selections', async () => {
+  const { resolveLocalReference } = await import('../packages/studio/src/localImage.js');
+  const file = new File(['fixture'], 'reference.png', { type: 'image/png' });
+  const files = new Map([['blob:valid-reference', file]]);
+  assert.equal(resolveLocalReference([], files), null);
+  assert.equal(resolveLocalReference(['blob:valid-reference'], files), file);
+  assert.throws(() => resolveLocalReference(['blob:stale-reference'], files), /INVALID_REFERENCE_IMAGE/);
+  assert.throws(() => resolveLocalReference(['blob:valid-reference', 'blob:stale-reference'], files), /INVALID_REFERENCE_IMAGE/);
+});
