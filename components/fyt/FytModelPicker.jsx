@@ -33,7 +33,7 @@ const NEUTRAL_TONE = 'from-white/[0.12] to-white/[0.04] text-white/80';
 // 有 logo 的厂商画 logo，没有的退回首字母
 function BrandIcon({ vendor, size = 14, className = '' }) {
   const paths = brandPaths(vendor);
-  if (!paths) return <span className={`text-[10px] font-semibold ${className}`}>{vendor[0].toUpperCase()}</span>;
+  if (!paths) return <span className={`text-[11px] font-semibold ${className}`}>{vendor[0].toUpperCase()}</span>;
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
     {paths.map((d, index) => <path key={index} d={d} />)}
   </svg>;
@@ -103,7 +103,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
     <button type="button" disabled={disabled} onClick={() => (open ? close() : setOpen(true))}
       className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#161616] px-2.5 py-1.5 text-xs text-white/85 transition-colors hover:border-white/25 disabled:opacity-40">
       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-white/15 to-white/5 text-white/85">
-        <BrandIcon vendor={current?.vendor || 'fyt'} size={12} />
+        <BrandIcon vendor={current?.vendor || 'fyt'} size={13} />
       </span>
       <span className="max-w-[180px] truncate">{current?.label || (zh ? '选择模型' : 'Select model')}</span>
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40">
@@ -130,7 +130,7 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
           <button type="button" title={vendor}
             onClick={() => setVendorFilter(previous => (previous === vendor ? null : vendor))}
             className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br transition-all ${VENDOR_TONE[vendor] || NEUTRAL_TONE} ${vendorFilter === vendor ? 'ring-1 ring-cyan-300/60' : 'hover:brightness-125'}`}>
-            <BrandIcon vendor={vendor} size={16} />
+            <BrandIcon vendor={vendor} size={21} />
           </button>
           <span className="mt-1 text-[8px] font-semibold tracking-[0.12em] text-white/25">{VENDOR_CODE[vendor] || vendor.slice(0, 2).toUpperCase()}</span>
         </div>)}
@@ -170,15 +170,17 @@ export default function FytModelPicker({ models, capabilities, value, onChange, 
           {!visible.length && <p className="px-4 py-6 text-center text-[11px] text-white/25">{zh ? '没有匹配的模型' : 'No models match'}</p>}
           {grouped.map(([vendor, list]) => <div key={vendor}>
             <div className="flex items-center gap-1.5 px-4 py-1.5">
-              <span className="flex h-3.5 w-3.5 items-center justify-center rounded bg-white/10 text-white/60"><BrandIcon vendor={vendor} size={9} /></span>
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded bg-white/10 text-white/60"><BrandIcon vendor={vendor} size={10} /></span>
               <span className="text-[10.5px] text-white/45">{vendor}</span>
             </div>
             <div className="px-2">
               {list.map(item => <button key={item.id} type="button"
                 onClick={() => { onChange(item.id); close(); }}
-                className={`flex min-h-[50px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${item.id === value ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'}`}>
+                className={`flex min-h-[50px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${item.id === value
+                  ? 'bg-white/[0.07] ring-1 ring-inset ring-white/[0.09]'
+                  : 'hover:bg-white/[0.04]'}`}>
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-white/12 to-white/[0.04] text-white/75">
-                  <BrandIcon vendor={vendor} size={13} />
+                  <BrandIcon vendor={vendor} size={16} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12px] text-white/90">{item.label}</span>
