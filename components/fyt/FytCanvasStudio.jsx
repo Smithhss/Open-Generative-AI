@@ -250,7 +250,7 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       {error ? <span role="alert" className="text-red-300">{error}</span> : <span role="status" className="text-cyan-300/80">{notice}</span>}
     </div>}
     <div className="flex-1 min-h-0">
-      <DesignAgentStudio locale={locale} userEmail={userEmail} authToken={authToken}
+      <DesignAgentStudio locale={locale} active={active} userEmail={userEmail} authToken={authToken}
         localCanvas onLocalFiles={importFiles} isLocalSource={isLocalSource} onLocalClear={releaseSources}
         onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar}
         resolveAsset={resolveAgentAsset} fytTicket={ticket} />
