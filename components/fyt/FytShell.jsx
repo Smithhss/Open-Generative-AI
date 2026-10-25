@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import StandaloneShell from '@/components/StandaloneShell';
-import { bootstrapSession, clearSession, getServerSessionState, getSessionState, subscribeSession } from '@/lib/fyt/session.mjs';
+import { bootstrapSession, clearSession, getAccessToken, getServerSessionState, getSessionState, subscribeSession } from '@/lib/fyt/session.mjs';
 import { subscribeSessionEvents } from '@/lib/fyt/session-sync.mjs';
 import { getAccount, logout } from '@/lib/fyt/account.mjs';
 import { formatQuota } from '@/lib/fyt/currency.mjs';
@@ -62,17 +62,21 @@ function FytAccountControls({ session, locale, authError, checkSession, balanceR
 const BASE = process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || '';
 
 // 会话里的 user 不含 role，单独查一次；只有管理员能看到侧边栏开关
-function useIsAdmin(accessToken) {
+function useIsAdmin(ready) {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
-    if (!accessToken) { setIsAdmin(false); return undefined; }
+    if (!ready) return undefined;
     let cancelled = false;
-    fetch('/api/user/self', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })
-      .then(response => response.json())
+    // 用 getAccessToken() 现取：它在需要时会先刷新，比依赖渲染时的快照可靠
+    getAccessToken()
+      .then(token => {
+        if (!token) return null;
+        return fetch('/api/user/self', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }).then(r => r.json());
+      })
       .then(body => { if (!cancelled) setIsAdmin(Number(body?.data?.role ?? 0) >= 10); })
       .catch(() => { if (!cancelled) setIsAdmin(false); });
     return () => { cancelled = true; };
-  }, [accessToken]);
+  }, [ready]);
   return isAdmin;
 }
 
@@ -104,7 +108,7 @@ export default function FytShell({ locale = 'en' }) {
   // Never pass the access token to the upstream shell's API-key prop. Remount on
   // identity changes so prompts and media cannot survive a switch of account.
   const identity = session.status === 'authenticated' ? session.user?.id : null;
-  const isAdmin = useIsAdmin(session.accessToken);
+  const isAdmin = useIsAdmin(session.status === 'authenticated');
   return <StandaloneShell key={identity || 'anonymous'} locale={locale} fyt={{
     userId: identity,
     userEmail: session.user?.username || (identity ? `fyt-${identity}` : undefined),
