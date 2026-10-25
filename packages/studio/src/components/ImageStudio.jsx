@@ -190,7 +190,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], 
   };
 
   const processFiles = async (files) => {
-    if (previewMode) return;
+    if (previewMode && !localOnly) return;
     if (!files.length) return;
 
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -203,6 +203,10 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], 
     }
 
     if (localOnly) {
+      if (files.some(file => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size)) {
+        alert('PNG / JPEG / WebP');
+        return;
+      }
       // fyt 模式：源图只留在浏览器里，随生成请求直接上传，不经过第三方存储。
       const entries = files.slice(0, maxImages).map((file) => {
         const url = URL.createObjectURL(file);
@@ -671,25 +675,25 @@ const PROVIDER_LOGOS = {
 
 const invertLogos = ['openai', 'blackforest', 'runway', 'ideogram', 'lightricks', 'grok'];
 
-function ModelDropdown({ selectedModel, onSelect, onClose, copy }) {
-  const t = copy.modelDropdown;
+export function ImageModelDropdown({ selectedModel, onSelect, onClose, copy, locale = 'en', entries = imageModelPickerEntries, categories }) {
+  const t = (copy || (locale === 'zh' ? zh : en)).modelDropdown;
   const [search, setSearch] = useState("");
-  const selectedEntry = imageModelPickerEntryByVariantId.get(selectedModel);
-  const modelCategories = [
+  const selectedEntry = entries === imageModelPickerEntries ? imageModelPickerEntryByVariantId.get(selectedModel) : entries.find(entry => entry.id === selectedModel);
+  const modelCategories = categories || [
     {
       id: "all",
       label: t.categoryAll,
-      entries: imageModelPickerEntries,
+      entries,
     },
     {
       id: "t2i",
       label: t.categoryT2I,
-      entries: imageModelPickerEntries.filter((entry) => entry.variantsByMode.t2i),
+      entries: entries.filter((entry) => entry.variantsByMode.t2i),
     },
     {
       id: "i2i",
       label: t.categoryI2I,
-      entries: imageModelPickerEntries.filter((entry) => entry.variantsByMode.i2i),
+      entries: entries.filter((entry) => entry.variantsByMode.i2i),
     },
   ];
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -867,7 +871,7 @@ function ModelDropdown({ selectedModel, onSelect, onClose, copy }) {
         </div>
         
         <div className="text-xs font-semibold text-secondary py-1 shrink-0 flex items-center justify-between">
-          <span>{activeCategory.label} {t.modelsSuffix}</span>
+          <span>{activeCategory.label} · {filtered.length} {t.modelsSuffix}</span>
           {selectedProvider !== "all" && (
             <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-white/60">
               {availableProviders.find(p => p.id === selectedProvider)?.name || selectedProvider}
@@ -1157,6 +1161,14 @@ export default function ImageStudio({
   ]);
 
   const processDroppedImages = async (files) => {
+    if (fytImage) {
+      const file = files[0];
+      if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size || file.size > 10 * 1024 * 1024) return;
+      const url = URL.createObjectURL(file);
+      handleFytLocalFile(file, url);
+      handleFytUploadSelect({ urls: [url] });
+      return;
+    }
     if (previewMode) return;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     const tooLarge = files.filter((f) => f.size > MAX_IMAGE_SIZE);
@@ -1235,7 +1247,7 @@ export default function ImageStudio({
   const showEffectBtn = currentEffects.length > 0;
   const selectedFamily = imageModelCatalog.familyById.get(selectedFamilyId) || initialFamily;
   const selectedPickerEntry = imageModelPickerEntryByVariantId.get(selectedModelId);
-  const selectedModelDisplayName = fytImage ? "GPT Image 2" : selectedPickerEntry?.name || selectedFamily.name;
+  const selectedModelDisplayName = fytImage ? fytImage.modelLabel || "FYT" : selectedPickerEntry?.name || selectedFamily.name;
   const currentMode = imageMode ? "i2i" : "t2i";
   const selectedVariant = imageModelCatalog.variantById.get(selectedModelId);
   const supplementalInputs = getSupplementalModelInputs(selectedVariant?.model);
@@ -1328,6 +1340,7 @@ export default function ImageStudio({
   }, []);
 
   const handleFytUploadClear = useCallback(() => {
+    for (const url of fytLocalFiles.current.keys()) URL.revokeObjectURL(url);
     fytLocalFiles.current.clear();
     setUploadedImageUrls([]);
   }, []);
@@ -1683,16 +1696,20 @@ export default function ImageStudio({
           <div className="flex flex-col gap-3">
             {/* Inline list of uploaded files */}
             <div className="flex items-center gap-2.5 flex-wrap">
-              {!fytImage && uploadedImageUrls && uploadedImageUrls.length > 0 && uploadedImageUrls.map((url, idx) => (
+              {uploadedImageUrls && uploadedImageUrls.length > 0 && uploadedImageUrls.map((url, idx) => (
                 <div key={url} className={PROMPT_MEDIA_PREVIEW_CLASS}>
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <img src={url} alt={locale === "zh" ? "参考图片" : "Reference image"} className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => {
                       const next = uploadedImageUrls.filter((_, i) => i !== idx);
                       setUploadedImageUrls(next);
-                      if (next.length === 0) handleUploadClear();
+                      if (next.length === 0) {
+                        if (fytImage) handleFytUploadClear();
+                        else handleUploadClear();
+                      }
                     }}
+                    aria-label={locale === "zh" ? "移除参考图片" : "Remove reference image"}
                     className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-black rounded-full flex items-center justify-center text-white/85 hover:text-white text-[8px] border border-white/5"
                   >
                     ×
@@ -1784,7 +1801,7 @@ export default function ImageStudio({
                     className="w-[calc(100vw-2rem)] md:w-[480px] max-w-md md:max-w-none max-h-[70vh]"
                   >
                     <PromptPopoverHeader>{copy.popovers.model}</PromptPopoverHeader>
-                    <ModelDropdown
+                    <ImageModelDropdown
                       selectedModel={selectedModelId}
                       onSelect={handleModelSelect}
                       onClose={() => setDropdownOpen(null)}

@@ -15,13 +15,16 @@
     "agents": "Agents",
     "design-agent": "Design Agent",
     "apps": "Explore Apps",
-    "ai-influencer": "AI Influencer Studio"
+    "ai-influencer": "AI Influencer Studio",
+    "works": "Works",
+    "mcp-cli": "MCP & CLI"
   },
   "categories": {
     "images": "Images",
     "video": "Video",
     "audio": "Audio",
-    "agents-automation": "Agents & Automation"
+    "agents-automation": "Agents & Automation",
+    "library": "Library"
   },
   "shell": {
     "brand": "OpenGenerativeAI",

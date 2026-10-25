@@ -10,21 +10,23 @@ RUN npm ci --no-audit --no-fund
 
 FROM deps AS builder
 COPY . .
-# basePath 在构建期决定路由：子域部署留空，老的 /create 路径部署传 /create
-ARG NEXT_PUBLIC_STUDIO_BASE_PATH=
+# basePath is compiled into Next; staging and production both use /create.
+ARG NEXT_PUBLIC_STUDIO_BASE_PATH=/create
 ENV NEXT_PUBLIC_STUDIO_MODE=fyt FYT_LOCAL_API=false NEXT_PUBLIC_STUDIO_BASE_PATH=$NEXT_PUBLIC_STUDIO_BASE_PATH
 RUN npm run build:packages && npm run build
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
-ARG NEXT_PUBLIC_STUDIO_BASE_PATH=
+ARG NEXT_PUBLIC_STUDIO_BASE_PATH=/create
 ENV NODE_ENV=production NEXT_PUBLIC_STUDIO_MODE=fyt NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 NEXT_PUBLIC_STUDIO_BASE_PATH=$NEXT_PUBLIC_STUDIO_BASE_PATH
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder /app/LICENSE ./LICENSE
+COPY --from=builder --chown=node:node /app/scripts/fyt-start.mjs ./scripts/fyt-start.mjs
+COPY --from=builder --chown=node:node /app/lib/fyt/ticket.mjs ./lib/fyt/ticket.mjs
 # 画布 AI 的会话落盘目录，必须归 node 所有，否则命名卷里写不进去
 RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "scripts/fyt-start.mjs"]

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { validateUploadProxyTarget, getApiKeyFromRequest, isBlockedFileType } from '../../../../src/lib/uploadProxyTarget';
 
 export async function POST(request) {
+    if (process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt') {
+        return NextResponse.json({ error: 'Uploads are disabled in fyt mode' }, { status: 404 });
+    }
     try {
         const apiKey = getApiKeyFromRequest(request);
         if (!apiKey) {

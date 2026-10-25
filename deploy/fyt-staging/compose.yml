@@ -2,17 +2,18 @@ name: fyt-creative-staging
 
 services:
   studio:
-    image: fyt-studio:staging
+    image: ${FYT_STUDIO_IMAGE:-fyt-studio:staging}
     build:
       context: ../..
       dockerfile: deploy/fyt-staging/Dockerfile
       args:
-        # 子域部署留空；老的 /create 路径部署改成 /create
-        NEXT_PUBLIC_STUDIO_BASE_PATH: 
+        # Same-origin production topology; this value is baked into Next.
+        NEXT_PUBLIC_STUDIO_BASE_PATH: /create
     restart: unless-stopped
     environment:
       # 画布 AI 从容器内部直接调 Go 网关，鉴权沿用浏览器带来的 cookie / Bearer。
       - FYT_INTERNAL_API=http://api:3000
+      - FYT_TICKET_SECRET=${FYT_TICKET_SECRET:?supply a private staging secret of at least 32 bytes}
     volumes:
       # 画布 AI 的会话与资产落在这里，容器重建不丢
       - studioData:/app/data
@@ -20,7 +21,7 @@ services:
       fyt:
         aliases: [fyt-studio]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/create/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 10s
       retries: 4

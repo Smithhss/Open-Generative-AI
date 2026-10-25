@@ -7,7 +7,9 @@ import { getUserBalance } from '../muapi';
 
 export default function DesignAgentStudio({
   apiKey,
+  locale = 'en',
   userEmail,
+  userId = null,
   balance,
   isHeaderVisible,
   onToggleHeader,
@@ -27,23 +29,15 @@ export default function DesignAgentStudio({
   toolbarExtra = null,
   resolveAsset = null,
   fytTicket = null,
+  fytTicketExpiresAt = 0,
 }) {
   const [userData, setUserData] = useState(null);
 
-  // Written synchronously during render (not inside an effect below) so it's already in
-  // localStorage before CreativeCanvas's own mount effects read it — passive effects run
-  // child-before-parent within a commit, so setting this from *our* useEffect ran after
-  // CreativeCanvas's first sessions/agent-skills fetch had already gone out unauthenticated.
-  if (typeof window !== 'undefined') {
-    if (apiKey) {
-      sessionStorage.setItem("fromDesignAgent", "true");
-      localStorage.setItem("token", apiKey);
-    } else if (authToken) {
-      // fyt 模式：画布把 localStorage.token 当 Bearer 发出去，这里放入会话访问令牌。
-      // 只在本组件挂载期间存在，卸载时清掉。
-      localStorage.setItem("token", authToken);
-    }
-    // 既没有 apiKey 也没有 authToken 时不要动这个键：外层（fyt 画布）会自己维护它。
+  // Legacy BYOK mode retains its existing storage contract. FYT credentials
+  // remain in memory and reach the canvas only through the ticket prop.
+  if (!localCanvas && apiKey && typeof window !== 'undefined') {
+    sessionStorage.setItem("fromDesignAgent", "true");
+    localStorage.setItem("token", apiKey);
   }
 
   useEffect(() => {
@@ -81,7 +75,9 @@ export default function DesignAgentStudio({
   return (
     <div className="h-full w-full bg-black overflow-hidden design-agent-studio">
       <CreativeCanvas 
+        locale={locale}
         user={userData}
+        fytUserId={userId}
         isAuthorized={!!userData}
         creditConversionRate={200}
         theme="dark"
@@ -101,6 +97,7 @@ export default function DesignAgentStudio({
         toolbarExtra={toolbarExtra}
         resolveAsset={resolveAsset}
         fytTicket={fytTicket}
+        fytTicketExpiresAt={fytTicketExpiresAt}
       />
     </div>
   );

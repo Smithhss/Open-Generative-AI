@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { DesignAgentStudio } from 'studio';
 import { authenticatedScope } from '@/lib/fyt/chat.mjs';
-import { getAccessToken, subscribeSession } from '@/lib/fyt/session.mjs';
+import { getAccessToken, getSessionState } from '@/lib/fyt/session.mjs';
+import { imageBlob } from '../../packages/studio/src/utils/imageBlob.js';
 import { loadLocalImage, validateLocalImageFile } from '../../packages/studio/src/localImage.js';
 import { MAX_PROJECT_BYTES, buildCanvasProject, parseCanvasProject, prepareCanvasProject } from '../../packages/Open-AI-Design-Agent/packages/design-agent/src/localCanvasProject.js';
 
 // 原版画布 + fyt 本地素材：素材只留在浏览器里，项目文件本地保存，不经过任何远端存储。
-export default function FytCanvasStudio({ locale, active, userEmail, authToken, incomingImage, onImageHandled }) {
+export default function FytCanvasStudio({ locale, active, userId, userEmail, authToken, incomingImage, onImageHandled }) {
   const zh = locale === 'zh';
   const [ready, setReady] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
@@ -34,23 +35,42 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
   const [ticket, setTicket] = useState(null);
   useEffect(() => {
     let disposed = false;
+    let pending = false;
+    let expiryTimer;
+    const controller = new AbortController();
     const endpoint = `${process.env.NEXT_PUBLIC_STUDIO_BASE_PATH || ''}/api/v1/creative-agent/ticket`;
+    setTicket(null);
 
     const refreshTicket = async () => {
+      if (pending || disposed || !authToken || !userId) return;
+      pending = true;
       try {
+        // Refresh may publish a new access token. The prop change starts a new
+        // effect; this round-trip must never install a ticket for the old one.
         const token = await getAccessToken();
-        if (!token || disposed) return;
-        const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+        const current = getSessionState();
+        if (disposed || token !== authToken || current.user?.id !== userId) return;
+        const response = await fetch(endpoint, { signal: controller.signal, credentials: 'same-origin',
+          cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
         const body = await response.json().catch(() => null);
-        if (!disposed && body?.ticket) setTicket(body.ticket);
-      } catch { /* 下次再试 */ }
+        const expiresAt = Math.min(Number(body?.expires_at) || 0, current.accessExpiresAt * 1000,
+          Date.now() + 15 * 60 * 1000);
+        if (disposed || getSessionState().accessToken !== token || getSessionState().user?.id !== userId) return;
+        clearTimeout(expiryTimer);
+        if (!response.ok || typeof body?.ticket !== 'string' || expiresAt <= Date.now()) {
+          setTicket(null);
+          return;
+        }
+        setTicket({ value: body.ticket, accessToken: token, expiresAt });
+        expiryTimer = setTimeout(() => { if (!disposed) setTicket(null); }, expiresAt - Date.now());
+      } catch { if (!disposed) setTicket(null); }
+      finally { pending = false; }
     };
 
     void refreshTicket();
-    const unsubscribe = subscribeSession(() => { void refreshTicket(); });
-    const timer = setInterval(() => { void refreshTicket(); }, 30 * 60 * 1000);
-    return () => { disposed = true; unsubscribe?.(); clearInterval(timer); };
-  }, []);
+    const timer = setInterval(() => { void refreshTicket(); }, 45 * 1000);
+    return () => { disposed = true; controller.abort(); clearInterval(timer); clearTimeout(expiryTimer); };
+  }, [authToken, userId]);
 
   const onProjectDirtyChange = useCallback(value => { dirtyRef.current = value; setDirty(value); }, []);
 
@@ -84,19 +104,30 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
 
   // 画布只接受 blob 源；AI 产物是远端地址，先取回字节注册成本地素材。
   const resolveAgentAsset = useCallback(async url => {
+    const epoch = generation.current;
     try {
-      const scope = await authenticatedScope();
       let blob;
-      try {
-        const response = await fetch(url, { ...scope.init });
-        if (!response.ok) return null;
-        blob = await response.blob();
-      } finally { scope.close(); }
+      if (typeof url === 'string' && url.startsWith('data:')) {
+        blob = await imageBlob(url);
+      } else {
+        const target = new URL(url, window.location.origin);
+        if (target.origin !== window.location.origin || target.username || target.password ||
+            !(target.pathname === '/pg/images/artifact' || /^\/api\/user\/artifacts\/[A-Za-z0-9_-]{1,128}$/.test(target.pathname))) return null;
+        const scope = await authenticatedScope();
+        try {
+          const response = await fetch(target.href, { ...scope.init, redirect: 'error' });
+          if (!response.ok) return null;
+          blob = await response.blob();
+          scope.check();
+        } finally { scope.close(); }
+      }
+      if (!alive.current || epoch !== generation.current) return null;
       const file = new File([blob], `agent-${Date.now()}.png`, { type: blob.type || 'image/png' });
       validateLocalImageFile(file);
       const loaded = await loadLocalImage(file);
+      if (!alive.current || epoch !== generation.current) { loaded.release(); return null; }
       sources.current.set(loaded.url, { ...loaded, file });
-      if (alive.current) setSourceCount(sources.current.size);
+      setSourceCount(sources.current.size);
       return loaded.url;
     } catch (error) {
       console.warn('[fyt-canvas] 产物转本地失败:', error?.message || error);
@@ -250,10 +281,10 @@ export default function FytCanvasStudio({ locale, active, userEmail, authToken, 
       {error ? <span role="alert" className="text-red-300">{error}</span> : <span role="status" className="text-cyan-300/80">{notice}</span>}
     </div>}
     <div className="flex-1 min-h-0">
-      <DesignAgentStudio locale={locale} active={active} userEmail={userEmail} authToken={authToken}
+      <DesignAgentStudio userId={userId} locale={locale} active={active} userEmail={userEmail} authToken={authToken}
         localCanvas onLocalFiles={importFiles} isLocalSource={isLocalSource} onLocalClear={releaseSources}
         onProjectDirtyChange={onProjectDirtyChange} canvasApiRef={canvas} toolbarExtra={toolbar}
-        resolveAsset={resolveAgentAsset} fytTicket={ticket} />
+        resolveAsset={resolveAgentAsset} fytTicketExpiresAt={ticket?.expiresAt || 0} fytTicket={ticket?.accessToken === authToken && ticket.expiresAt > Date.now() ? ticket.value : null} />
     </div>
     {sourceCount > 0 && <span className="sr-only">{zh ? `${sourceCount}张来源图片` : `${sourceCount} source images`}</span>}
   </div>;

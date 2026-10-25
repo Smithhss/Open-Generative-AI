@@ -1,0 +1,43 @@
+# First release: one replica only; file-backed sessions and assets are not shared state.
+name: fyt-creative-prod
+
+services:
+  studio:
+    # Required immutable registry reference, e.g. registry/studio@sha256:<64 hex>.
+    image: ${FYT_STUDIO_IMAGE:?set FYT_STUDIO_IMAGE to the approved image digest}
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_STUDIO_MODE: fyt
+      NEXT_PUBLIC_STUDIO_BASE_PATH: /create
+      FYT_LOCAL_API: "false"
+      FYT_INTERNAL_API: http://foyton-api:3000
+      FYT_TICKET_SECRET: ${FYT_TICKET_SECRET:?supply a private secret of at least 32 bytes}
+      FYT_DATA_DIR: /app/data
+    volumes:
+      - studio_data:/app/data
+    networks:
+      - fyt
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/create/zh/studio').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      start_period: 30s
+      interval: 15s
+      timeout: 10s
+      retries: 4
+    deploy:
+      replicas: 1
+
+volumes:
+  studio_data:
+    # Keep this name unchanged across release directories and project names.
+    name: fyt-studio-prod-data
+
+networks:
+  fyt:
+    external: true
+    # Existing Go compose project is fytapi-go; inspect before first deployment.
+    name: ${FYT_API_NETWORK:-fytapi-go_foyton-api-network}

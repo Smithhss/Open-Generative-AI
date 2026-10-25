@@ -23,6 +23,9 @@ function cleanHeaders(request) {
 }
 
 export async function GET(request) {
+    if (process.env.NEXT_PUBLIC_STUDIO_MODE === 'fyt') {
+        return NextResponse.json({ error: 'Uploads are disabled in fyt mode' }, { status: 404 });
+    }
     const apiKey = getApiKey(request);
     if (!apiKey) {
         return NextResponse.json({ error: 'Unauthorized: Missing API key' }, { status: 401 });
