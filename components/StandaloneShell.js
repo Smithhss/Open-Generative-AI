@@ -337,13 +337,8 @@ const persistNotifications = (notifications) => {
 
 export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const fytMode = Boolean(fyt);
-  const allowedTabs = new Set(visibleTabs ?? DEFAULT_VISIBLE_TABS);
-  const navigationCategories = fytMode
-    ? NAVIGATION_CATEGORIES
-        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => allowedTabs.has(tabId)) }))
-        .filter((category) => category.tabIds.length > 0)
-    : NAVIGATION_CATEGORIES;
-  // 侧边栏可见入口：管理员在后台改，这里读；没配置时用默认集合
+  // 侧边栏可见入口：管理员在后台改，这里读；没配置时用默认集合。
+  // 必须声明在 navigationCategories 之前，否则会踩暂时性死区。
   const [visibleTabs, setVisibleTabs] = useState(null);
   const [tabsAdminOpen, setTabsAdminOpen] = useState(false);
   useEffect(() => {
@@ -353,6 +348,12 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
     return () => { cancelled = true; };
   }, [fytMode]);
 
+  const allowedTabs = new Set(visibleTabs ?? DEFAULT_VISIBLE_TABS);
+  const navigationCategories = fytMode
+    ? NAVIGATION_CATEGORIES
+        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => allowedTabs.has(tabId)) }))
+        .filter((category) => category.tabIds.length > 0)
+    : NAVIGATION_CATEGORIES;
   const [imageTransfer, setImageTransfer] = useState(null);
   const [transferPending, setTransferPending] = useState(false);
   const [transferMessage, setTransferMessage] = useState('');
