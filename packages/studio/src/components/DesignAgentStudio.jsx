@@ -18,6 +18,7 @@ export default function DesignAgentStudio({
   // fyt 本地画布：透传给 CreativeCanvas，素材不上传、项目文件本地保存。
   authToken = null,
   localCanvas = false,
+  active = true,
   onLocalFiles = null,
   isLocalSource = null,
   onLocalClear = null,
@@ -91,6 +92,7 @@ export default function DesignAgentStudio({
         onGenerationComplete={onGenerationComplete}
         onGenerationError={onGenerationError}
         localCanvas={localCanvas}
+        active={active}
         onLocalFiles={onLocalFiles}
         isLocalSource={isLocalSource}
         onLocalClear={onLocalClear}
