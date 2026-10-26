@@ -1304,8 +1304,16 @@ export default function VideoStudio({
   );
 
   // ── Persistence: Load ────────────────────────────────────────────────────
+  const resolveHistoryVideo = fytVideo?.resolveHistoryVideo;
+  const fytHistory = Boolean(fytVideo);
+  const [restoringHistory, setRestoringHistory] = useState(false);
+  const [historyRestoreError, setHistoryRestoreError] = useState(false);
+  const restoredHistoryKey = useRef(null);
   useEffect(() => {
-    if (!PERSIST_KEY) return;
+    if (!PERSIST_KEY || (fytHistory && !resolveHistoryVideo)) return;
+    if (fytHistory && restoredHistoryKey.current === PERSIST_KEY) return;
+    let cancelled = false;
+    let restoring = false;
     try {
       const stored = localStorage.getItem(PERSIST_KEY);
       if (stored) {
@@ -1393,7 +1401,29 @@ export default function VideoStudio({
         }
         setWorkflowMediaDrafts(persistedDrafts);
         if (data.prompt) setPrompt(data.prompt);
-        if (data.localHistory) setLocalHistory(data.localHistory);
+        if (Array.isArray(data.localHistory)) {
+          if (resolveHistoryVideo) {
+            // Blob URLs belong to the old document; recover bytes with authentication by task id.
+            restoring = true;
+            setRestoringHistory(true);
+            setHistoryRestoreError(false);
+            let failed = false;
+            Promise.all(data.localHistory.slice(0, 30).map(async (entry) => {
+              if (typeof entry?.id !== 'string' || !entry.id) return null;
+              try { return { ...entry, url: await resolveHistoryVideo(entry.id) }; }
+              catch { failed = true; return entry; }
+            })).then((entries) => {
+              if (cancelled) {
+                entries.forEach((entry) => { if (entry?.url?.startsWith('blob:')) URL.revokeObjectURL(entry.url); });
+                return;
+              }
+              setLocalHistory(entries.filter(Boolean));
+              restoredHistoryKey.current = PERSIST_KEY;
+              setHistoryRestoreError(failed);
+              setRestoringHistory(false);
+            });
+          } else setLocalHistory(data.localHistory);
+        }
 
         // Update control visibility based on restored model/mode
         commonParameterValuesRef.current = {
@@ -1413,12 +1443,14 @@ export default function VideoStudio({
       console.warn("Failed to load VideoStudio persistence:", err);
     } finally {
       hasRestored.current = true;
+      if (!restoring) restoredHistoryKey.current = PERSIST_KEY;
     }
-  }, [applyControlsForModel, defaultModel.id]);
+    return () => { cancelled = true; };
+  }, [applyControlsForModel, defaultModel.id, PERSIST_KEY, resolveHistoryVideo, fytHistory]);
 
   // ── Persistence: Save ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!PERSIST_KEY) return;
+    if (!PERSIST_KEY || restoringHistory || (fytHistory && !resolveHistoryVideo)) return;
     const timer = setTimeout(() => {
       try {
         const state = {
@@ -1449,6 +1481,10 @@ export default function VideoStudio({
     }, 500); // 500ms debounce
     return () => clearTimeout(timer);
   }, [
+    PERSIST_KEY,
+    restoringHistory,
+    fytHistory,
+    resolveHistoryVideo,
     imageMode,
     v2vMode,
     selectedWorkflowId,
@@ -2092,7 +2128,7 @@ export default function VideoStudio({
   // ── generate ──────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (fytVideo) {
-      if (!fytVideo.enabled || generating) return;
+      if (!fytVideo.enabled || generating || restoringHistory) return;
       setGenerating(true);
       try {
         const result = await fytVideo.generate({ prompt: prompt.trim() });
@@ -2362,6 +2398,7 @@ export default function VideoStudio({
     apiKey,
     previewMode,
     fytVideo,
+    restoringHistory,
     addToLocalHistory,
     showVideoInCanvas,
     copy,
@@ -2528,6 +2565,9 @@ export default function VideoStudio({
       className="w-full h-full flex flex-col items-center justify-center bg-app-bg relative overflow-hidden"
     >
       {/* ── CENTRAL GALLERY AREA ── */}
+      {historyRestoreError && <p role="alert" className="px-4 py-2 text-sm text-amber-200">
+        {locale === 'zh' ? '部分视频暂未恢复，历史记录已保留，请到作品库重试播放。' : 'Some videos could not be restored. History is preserved; retry playback in Works.'}
+      </p>}
       <div className="flex-1 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar pb-40 lg:pb-32 px-2">
         {history.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full pt-4 animate-fade-in-up">
@@ -3441,7 +3481,7 @@ export default function VideoStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={(previewMode && !fytVideo) || generating || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={(previewMode && !fytVideo) || generating || restoringHistory || mediaUploading || (fytVideo ? !fytVideo.enabled : false) || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>
@@ -3452,7 +3492,7 @@ export default function VideoStudio({
                 </>
               ) : (
                 <>
-                  <span>{fytVideo ? copy.controls.generate : previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.controls.generate}</span>
+                  <span>{restoringHistory ? (locale === 'zh' ? '正在恢复视频…' : 'Restoring videos…') : fytVideo ? copy.controls.generate : previewMode ? (locale === 'zh' ? '暂未开放' : 'Unavailable') : copy.controls.generate}</span>
                 </>
               )}
             </PromptAction>

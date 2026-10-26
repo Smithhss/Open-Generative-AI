@@ -39,6 +39,8 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
   const [running, setRunning] = useState(false);
   const [resumed, setResumed] = useState(null);
   const abort = useRef(null);
+  const videoUrls = useRef(new Set());
+  const videoReads = useRef(new Set());
 
   const copy = useCallback((code) => {
     if (code === 'AUTH_REQUIRED') return zh ? '请先登录 fyt。' : 'Sign in with fyt first.';
@@ -48,7 +50,12 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
       : 'Request incomplete. Check balance, channel and logs. No automatic retry; interruption does not imply no charge.';
   }, [zh]);
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => {
+    abort.current?.abort();
+    videoReads.current.forEach(controller => controller.abort());
+    videoUrls.current.forEach(url => URL.revokeObjectURL(url));
+    videoUrls.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!userId || !active) return undefined;
@@ -106,20 +113,36 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
   }, [userId, active, onSettled]);
 
   // 播放地址需要鉴权，<video src> 带不了请求头，所以取回字节换成本地 blob。
-  async function localizeVideo(id) {
+  const localizeVideo = useCallback(async (id) => {
     const path = fytVideoContentUrl(id);
+    const controller = new AbortController();
+    videoReads.current.add(controller);
+    let scope;
     try {
-      const scope = await authenticatedScope();
-      try {
-        const response = await fetch(path, { ...scope.init });
-        if (!response.ok) return path;
-        const blob = await response.blob();
-        if (!blob.size) return path;
-        return URL.createObjectURL(blob);
-      } finally { scope.close(); }
-    } catch {
-      return path;
+      scope = await authenticatedScope(controller.signal);
+      scope.check();
+      const response = await fetch(path, scope.init);
+      if (!response.ok) throw new Error(`VIDEO_HTTP_${response.status}`);
+      const blob = await response.blob();
+      scope.check();
+      if (!blob.size || !blob.type.startsWith('video/')) throw new Error('INVALID_VIDEO_RESPONSE');
+      const url = URL.createObjectURL(blob);
+      videoUrls.current.add(url);
+      return url;
+    } finally {
+      scope?.close();
+      videoReads.current.delete(controller);
     }
+  }, []);
+
+  async function downloadResumed() {
+    try {
+      const url = await localizeVideo(resumed.id);
+      const link = document.createElement('a');
+      link.href = url; link.download = `${resumed.id}.mp4`;
+      link.click();
+      setTimeout(() => { URL.revokeObjectURL(url); videoUrls.current.delete(url); }, 60000);
+    } catch (cause) { setError(copy(cause?.message)); }
   }
 
   // 提交并等待终态：原版画廊需要最终地址才能渲染。
@@ -173,7 +196,7 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
       {sizes.map(value => <option key={value} value={value}>{value}</option>)}
     </select>
     {statusLabel && <span className="text-[11px] text-white/35">{statusLabel}</span>}
-    {resumed && isSuccessStatus(status) && <a className={`${pill} text-cyan-300`} href={fytVideoContentUrl(resumed.id)} download>{zh ? '下载上次结果' : 'Download last'}</a>}
+    {resumed && isSuccessStatus(status) && <button type="button" className={`${pill} text-cyan-300`} onClick={downloadResumed}>{zh ? '下载上次结果' : 'Download last'}</button>}
     {error && <span className="text-[11px] text-red-300/90">{error}</span>}
   </>;
 
@@ -182,6 +205,7 @@ export default function FytVideoStudio({ locale, userId, active, onSettled }) {
       enabled: Boolean(userId && group && model && models.length && !running),
       controls,
       modelLabel: labelForModel(model),
+      resolveHistoryVideo: active ? localizeVideo : null,
       generate,
       onError: cause => setError(copy(cause?.message)),
     }} />;
