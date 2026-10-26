@@ -15,13 +15,16 @@
     "agents": "智能体",
     "design-agent": "设计智能体",
     "apps": "探索应用",
-    "ai-influencer": "AI 网红工作室"
+    "ai-influencer": "AI 网红工作室",
+    "works": "作品",
+    "mcp-cli": "MCP 与命令行"
   },
   "categories": {
     "images": "图像",
     "video": "视频",
     "audio": "音频",
-    "agents-automation": "智能体与自动化"
+    "agents-automation": "智能体与自动化",
+    "library": "作品库"
   },
   "shell": {
     "brand": "OpenGenerativeAI",

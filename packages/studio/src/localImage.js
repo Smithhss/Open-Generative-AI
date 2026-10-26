@@ -36,3 +36,12 @@ export function loadLocalImage(file, { signal } = {}) {
     image.src = url;
   });
 }
+
+// A visible reference must retain its original File; never downgrade a stale edit to text-to-image.
+export function resolveLocalReference(urls, files) {
+  if (!urls.length) return null;
+  const file = urls.length === 1 ? files.get(urls[0]) : null;
+  if (!file) throw new Error('INVALID_REFERENCE_IMAGE');
+  validateLocalImageFile(file);
+  return file;
+}

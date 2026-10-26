@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { usePathname } from 'next/navigation';
 import StandaloneShell from '@/components/StandaloneShell';
 import { bootstrapSession, clearSession, getAccessToken, getServerSessionState, getSessionState, subscribeSession } from '@/lib/fyt/session.mjs';
 import { subscribeSessionEvents } from '@/lib/fyt/session-sync.mjs';
@@ -9,6 +10,9 @@ import { formatQuota } from '@/lib/fyt/currency.mjs';
 
 function FytAccountControls({ session, locale, authError, checkSession, balanceRevision }) {
   const zh = locale === 'zh';
+  const pathname = usePathname();
+  const localPath = (BASE && pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname).replace(/^\/zh(?=\/)/, '');
+  const languagePath = localPath.startsWith('/studio') ? localPath : '/studio';
   const [account, setAccount] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,7 +45,7 @@ function FytAccountControls({ session, locale, authError, checkSession, balanceR
   }
   const buttonClass = 'px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50';
   return <>
-    <a href={zh ? `${BASE}/studio` : `${BASE}/zh/studio`} className={buttonClass}>{zh ? 'EN' : '中文'}</a>
+    <a href={zh ? `${BASE}${languagePath}` : `${BASE}/zh${languagePath}`} className={buttonClass} aria-label={zh ? '切换为英文' : 'Switch to Chinese'}>{zh ? 'English' : '中文'}</a>
     {session.status === 'authenticated' ? <>
       <button className={buttonClass} onClick={() => setReload(value => value + 1)} title={error || (zh ? '刷新余额' : 'Refresh balance')} aria-label={zh ? '刷新余额' : 'Refresh balance'}>
         <span className="hidden sm:inline mr-2">{session.user?.username}</span>

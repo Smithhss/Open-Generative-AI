@@ -13,6 +13,8 @@
 
 本目录 Compose 独立管理 `fyt-creative-staging-studio-1`，接入已存在的 `fyt-staging_default` 网络，别名 `fyt-studio`。不发布新宿主机端口，不连接数据库，不挂载凭证，不替换既有API/Redis/PostgreSQL/前端服务。
 
+先在受保护的外部环境提供 `FYT_TICKET_SECRET`（独立随机值，至少32字节；不得使用生产密钥或默认公开值）。可通过 `--env-file <外部env文件>` 传入，禁止把真实值写到仓库或命令日志。
+
 ```bash
 docker compose -f deploy/fyt-staging/compose.yml build studio
 docker compose -f deploy/fyt-staging/compose.yml up -d --no-build studio
@@ -22,9 +24,17 @@ docker compose -f deploy/fyt-staging/compose.yml up -d --no-build studio
 
 当前 fyt API 使用既有本地镜像 `fyt-api:local`，本轮部署时镜像ID为 `sha256:7919a16f8a8849e7109c6077f22fff1126439efb4b21136305d89e438347ad6e`。API返回版本号为空，不能把它当成某个已确认Git提交；本轮没有重建或替换它。
 
+## 本机旧入口兼容（/create 候选）
+
+`FYT_STUDIO_IMAGE` 可由外部env文件指定唯一候选镜像；未设置时仍使用 `fyt-studio:staging`，构建候选不得覆盖稳定标签。
+
+Go 仓库 `stage7.conf` 已将旧 `/zh/studio`、`/en/studio`、`/studio` 及子路径302到同源 `/create` 对应路径，保留query。本机旧18444入口使用 Go仓库 `deploy/staging/nginx/variants/stage7-legacy-local.conf`，只监听容器18444并302到 `http://127.0.0.1:18443/create`，已有 `/create` 不重复添加。
+
+主线部署时备份现有运行配置，将 stage7 主配置和该local兼容模板分别放入 Go `deploy/staging/nginx/conf.d/`，保留宿主机 `127.0.0.1:18444:18444` 的现有端口映射；移除旧配置中独立studio server以免同端口冲突。本轮只准备模板，不修改运行配置或reload。local模板不得随production render/拷贝到生产。
+
 ## Nginx变更
 
-在现有 `foyton-relay/deploy/staging/nginx/conf.d/fytapi.conf` 的server内加入本目录 `studio.locations` 内容，使用 `BEGIN/END FYT CREATIVE STUDIO` 标记包围。仅 `/create`、`/create/` 代理到 `fyt-studio:3000`，请求路径保持不变；Docker DNS通过 `127.0.0.11` 动态解析，避免工作台未启动/重建时阻止整个fyt Nginx加载配置。`/api`、`/pg`、`/v1`、`/_fyt`和原控制台分流不改。Next本地开发rewrite不在此镜像中启用。
+在现有 `foyton-relay/deploy/staging/nginx/conf.d/fytapi.conf` 的server内加入本目录 `studio.locations` 内容，使用 `BEGIN/END FYT CREATIVE STUDIO` 标记包围。`/create`、`/create/` 代理到 `fyt-studio:3000`，请求路径保持不变；`/api/v1/creative-agent` 及子路径也由工作台承接并添加 `/create` 前缀。新版 Go `stage7.conf` 已包含这些路由，使用新版时不要重复追加；Docker DNS通过 `127.0.0.11` 动态解析，避免工作台未启动/重建时阻止整个fyt Nginx加载配置。其余 `/api`、`/pg`、`/v1`、`/_fyt`和原控制台分流不改。Next本地开发rewrite不在此镜像中启用。
 
 ```bash
 docker exec fyt-staging-nginx-1 nginx -t

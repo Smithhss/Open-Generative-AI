@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ImageStudio } from 'studio';
 import { getChatGroups } from '@/lib/fyt/chat.mjs';
 import { getImageModels, generateFytImage, generateFytImageEdit } from '@/lib/fyt/images.mjs';
+import { labelForModel } from '@/lib/fyt/model-alias.mjs';
 import FytModelPicker from '@/components/fyt/FytModelPicker';
-import FytTemplateBar from '@/components/fyt/FytTemplateBar';
 
 export default function FytImageStudio({ locale, userId, active, onSettled, onOpenImage, transferring }) {
   const zh = locale === 'zh';
@@ -25,6 +25,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     const code = error?.message || '';
     console.warn('[fyt-image] 生成失败:', code);
     const message = code === 'AUTH_REQUIRED' ? (zh ? '请先登录 fyt。' : 'Sign in with fyt first.')
+      : code === 'INVALID_REFERENCE_IMAGE' ? (zh ? '参考图已失效，请重新上传。本次未提交生成。' : 'Reference expired. Upload it again. No generation was submitted.')
       : code === 'IMAGE_BASE64_REQUIRED' ? (zh ? '上游未返回可直接显示的图片数据，请凭请求编号检查日志，勿重复点击生成。' : 'No inline image returned. Check the request log before generating again.')
       : (zh ? '请求未完成，请检查额度、渠道或日志。系统未自动重发；中断不代表未扣费。' : 'Request incomplete. Check balance, channel and logs. No automatic retry; interruption does not imply no charge.');
     return error?.requestId ? `${message} Request ID: ${error.requestId}` : message;
@@ -67,7 +68,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
   async function generateEdit({ prompt, file }) {
     if (run.current || !model || modelGroup !== group || !group || !userId) throw new Error('INVALID_IMAGE_REQUEST');
     const controller = new AbortController(); run.current = controller; setRunning(true);
-    try { return await generateFytImageEdit({ model, group, prompt, file }, { signal: controller.signal }); }
+    try { return await generateFytImageEdit({ model, group, prompt, file, size: activeSize || undefined }, { signal: controller.signal }); }
     finally { run.current = null; setRunning(false); if (!controller.signal.aborted) onSettled?.(); }
   }
 
@@ -93,8 +94,7 @@ export default function FytImageStudio({ locale, userId, active, onSettled, onOp
     <ImageStudio locale={locale} previewMode persistenceId={userId}
       fytImage={{
         enabled: Boolean(userId && group && modelGroup === group && models.length && !loading && !running),
-        // 输入框上方的模板入口
-        renderTemplates: ({ onPick }) => <FytTemplateBar kind="image" zh={zh} onPick={onPick} />,
+        modelLabel: labelForModel(model),
         generate,
         generateEdit,
         supportsEdit: true,

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import '@/lib/fyt/polyfills.mjs';
 import FytTabsAdmin from '@/components/fyt/FytTabsAdmin';
-import { DEFAULT_VISIBLE_TABS, fetchVisibleTabs } from '@/lib/fyt/tabs.mjs';
+import { STUDIO_TABS, DEFAULT_VISIBLE_TABS, fetchVisibleTabs } from '@/lib/fyt/tabs.mjs';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ImageStudio, VideoStudio, ClippingStudio, MotionControlStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, LayersStudio, getUserBalance } from 'studio';
@@ -29,6 +29,7 @@ import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locale
 // inside the component below, with these English strings as the fallback
 // when a locale bundle is missing the key.
 const TABS = [
+  { id: 'mcp-cli', label: 'MCP & CLI', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 7 5 5-5 5M13 17h6" /></svg> },
   {
     id: 'works',
     label: 'Works',
@@ -297,11 +298,8 @@ const NAVIGATION_CATEGORIES = [
 
 const EXPLORE_APPS_TAB = TABS.find((tab) => tab.id === 'apps');
 
-// fyt 模式下只展示已接入的入口；其余工具的代码与路由保留，但不占导航。
-const FYT_VISIBLE_TABS = new Set(['works', 'image', 'video', 'layers', 'design-agent', 'agents']);
-
 const getNavigationCategory = (tabId) => (
-  NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
+  NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId) || (tabId === 'mcp-cli' && category.id === 'agents-automation'))
 );
 
 const STORAGE_KEY = 'muapi_key';
@@ -351,7 +349,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const allowedTabs = new Set(visibleTabs ?? DEFAULT_VISIBLE_TABS);
   const navigationCategories = fytMode
     ? NAVIGATION_CATEGORIES
-        .map((category) => ({ ...category, tabIds: category.tabIds.filter((tabId) => allowedTabs.has(tabId)) }))
+        .map((category) => ({ ...category, tabIds: (category.id === 'agents-automation' ? [...category.tabIds, 'mcp-cli'] : category.tabIds).filter((tabId) => allowedTabs.has(tabId)) }))
         .filter((category) => category.tabIds.length > 0)
     : NAVIGATION_CATEGORIES;
   const [imageTransfer, setImageTransfer] = useState(null);
@@ -430,6 +428,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const [expandedCategoryId, setExpandedCategoryId] = useState(() => (
     getNavigationCategory(getInitialTab())?.id || NAVIGATION_CATEGORIES[0].id
   ));
+  const [expandedFytCategories, setExpandedFytCategories] = useState(() => new Set(NAVIGATION_CATEGORIES.map(category => category.id)));
   const activeCategory = getNavigationCategory(activeTab);
 
   const toggleSidebar = useCallback(() => {
@@ -443,6 +442,15 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
   const handleCategoryToggle = useCallback((categoryId) => {
     const isCollapsedNavigation = isSidebarCollapsed && !isMobileOpen;
 
+    if (fytMode) {
+      setExpandedFytCategories(previous => {
+        const next = new Set(previous);
+        if (!isCollapsedNavigation && next.has(categoryId)) next.delete(categoryId); else next.add(categoryId);
+        return next;
+      });
+      if (isCollapsedNavigation) toggleSidebar();
+      return;
+    }
     if (!isCollapsedNavigation) {
       setExpandedCategoryId((currentId) => (
         currentId === categoryId ? null : categoryId
@@ -452,7 +460,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
 
     setExpandedCategoryId(categoryId);
     toggleSidebar();
-  }, [isMobileOpen, isSidebarCollapsed, toggleSidebar]);
+  }, [fytMode, isMobileOpen, isSidebarCollapsed, toggleSidebar]);
 
   useEffect(() => {
     if (activeCategory?.id) {
@@ -894,7 +902,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
                 </svg>
               </div>
               <span className="text-sm font-bold tracking-tight hidden sm:block text-white">
-                {copy.shell.brand}
+                {fytMode ? 'FoytonAI' : copy.shell.brand}
               </span>
             </div>
           </div>
@@ -909,9 +917,9 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
-            {fytMode && <>
+            {fytMode && fyt.isAdmin && <>
               <button type="button" onClick={() => setTabsAdminOpen(true)}
-                title={locale === 'zh' ? '侧边栏入口开关' : 'Sidebar entries'}
+                title={locale === 'zh' ? '设置' : 'Settings'} aria-label={locale === 'zh' ? '设置' : 'Settings'}
                 className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10">⚙</button>
               <FytTabsAdmin open={tabsAdminOpen} onClose={() => setTabsAdminOpen(false)} token={fyt.accessToken}
                 zh={locale === 'zh'} onSaved={(tabs) => setVisibleTabs(tabs)} />
@@ -964,7 +972,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
                 {navigationCategories.map((category) => {
                   const isCategoryActive = activeCategory?.id === category.id;
                   const isCollapsed = isSidebarCollapsed && !isMobileOpen;
-                  const isCategoryOpen = !isCollapsed && expandedCategoryId === category.id;
+                  const isCategoryOpen = !isCollapsed && (fytMode ? expandedFytCategories.has(category.id) : expandedCategoryId === category.id);
                   const categoryPanelId = `navigation-category-${category.id}`;
                   const categoryLabelText = categoryLabel(category.id);
 
@@ -1051,7 +1059,8 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
                                 <span className={`flex-shrink-0 ${isActive ? 'text-[#22d3ee]' : 'text-white/45 group-hover:text-white/80'}`}>
                                   {tab.icon}
                                 </span>
-                                <span className="truncate">{tabLabel(tab.id)}</span>
+                                <span className="min-w-0 flex-1 truncate">{tabLabel(tab.id)}</span>
+                                {fytMode && !STUDIO_TABS.find(item => item.id === tab.id)?.available && <span className="shrink-0 text-[9px] text-white/35">{locale === 'zh' ? '待接入' : 'Coming soon'}</span>}
                               </a>
                             );
                           })}
@@ -1062,7 +1071,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
                 })}
               </div>
 
-              {EXPLORE_APPS_TAB && (
+              {EXPLORE_APPS_TAB && (!fytMode || allowedTabs.has('apps')) && (
                 <div className="mt-3 pt-3 border-t border-white/[0.07]">
                   <a
                     href={studioPath(EXPLORE_APPS_TAB.id)}
@@ -1086,7 +1095,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
                       {EXPLORE_APPS_TAB.icon}
                     </span>
                     {(!isSidebarCollapsed || isMobileOpen) && (
-                      <span className="truncate">{tabLabel(EXPLORE_APPS_TAB.id)}</span>
+                      <><span className="min-w-0 flex-1 truncate">{tabLabel(EXPLORE_APPS_TAB.id)}</span>{fytMode && <span className="shrink-0 text-[9px] text-white/35">{locale === 'zh' ? '预览' : 'Preview'}</span>}</>
                     )}
                   </a>
                 </div>
@@ -1106,7 +1115,7 @@ export default function StandaloneShell({ locale = 'en', fyt = null }) {
           <div className={activeTab === 'video' ? 'h-full w-full' : 'hidden'}><FytVideoStudio locale={locale} userId={fyt.userId} active={activeTab === 'video'} onSettled={fyt.onGenerationSettled} /></div>
           <div className={activeTab === 'layers' ? 'h-full w-full' : 'hidden'}><LayersStudio locale={locale} localOnly preserveOriginalPanel active={activeTab === 'layers'} incomingImage={imageTransfer?.target === 'layers' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           <div className={activeTab === 'agents' ? 'h-full w-full' : 'hidden'}><FytAgentStudio locale={locale} userId={fyt.userId} enabled={activeTab === 'agents'} onSettled={fyt.onGenerationSettled} /></div>
-          <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio locale={locale} userEmail={fyt.userEmail} authToken={fyt.accessToken} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
+          <div className={activeTab === 'design-agent' ? 'h-full w-full' : 'hidden'}><FytCanvasStudio key={fyt.userId || "anonymous"} userId={fyt.userId} locale={locale} userEmail={fyt.userEmail} authToken={fyt.accessToken} active={activeTab === 'design-agent'} incomingImage={imageTransfer?.target === 'design-agent' ? imageTransfer : null} onImageHandled={handleImageTransferComplete} /></div>
           {activeTab === 'apps' && <AppsStudio locale={locale} />}
           {!['works', 'image', 'video', 'agents', 'layers', 'apps', 'design-agent'].includes(activeTab) && <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
               <h1 className="text-3xl font-black text-white">{tabLabel(activeTab)}</h1>
